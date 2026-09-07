@@ -1,0 +1,59 @@
+:root {
+  /* Bright, modern athletic theme palette */
+  --bg-color: #f8fafc;        /* bright, clean slate-50 background */
+  --card-bg: #ffffff;         /* pure white surfaces */
+  --card-border: #e2e8f0;     /* refined light border */
+  --primary: #0284c7;         /* vibrant athletic ocean blue */
+  --primary-hover: #0369a1;   /* deep rich blue on hover */
+  --primary-light: #e0f2fe;   /* soft sky tint */
+  --accent: #16a34a;          /* fresh energetic sports green */
+  --accent-hover: #15803d;    /* deep emerald on hover */
+  --accent-light: #dcfce7;    /* light green badge background */
+  --text-main: #0f172a;       /* deep crisp slate for high-contrast readability */
+  --text-muted: #64748b;      /* elegant secondary text */
+  --border-color: #e2e8f0;    /* clean light divider */
+  --input-bg: #ffffff;        /* form input surface */
+  --danger: #ef4444;          /* alert red */
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg-color);
+  color: var(--text-main);
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Global Styles */
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+a:hover {
+  color: var(--primary-hover);
+}
+
+/* Global card hover style */
+.card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px rgba(2, 132, 199, 0.12);
+  border-color: rgba(2, 132, 199, 0.35);
+}

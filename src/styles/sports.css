@@ -1,0 +1,45 @@
+.sports-container,
+.tournaments-container,
+.teams-container {
+  padding: 1.5rem;
+  background: var(--bg-color);
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1.25rem;
+}
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  padding: 1.5rem;
+  border-radius: 10px;
+  text-align: center;
+  text-decoration: none;
+  color: var(--text-main);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+}
+.card:hover {
+  box-shadow: 0 10px 25px rgba(2, 132, 199, 0.12);
+  border-color: rgba(2, 132, 199, 0.4);
+  transform: translateY(-3px);
+}
+.actions a {
+  margin-right: 1rem;
+  color: var(--primary);
+}
+.bracket-container .bracket-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+.match {
+  background: var(--card-bg);
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-main);
+}

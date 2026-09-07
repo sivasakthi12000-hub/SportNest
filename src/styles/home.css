@@ -1,0 +1,56 @@
+.home-container {
+  padding: 1.5rem;
+  background: var(--bg-color);
+  color: var(--text-main);
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.hero {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  margin-bottom: 2.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+}
+.hero h2 {
+  color: var(--primary);
+  font-size: 2rem;
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+}
+.hero p {
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  max-width: 600px;
+  margin: 0 auto;
+}
+.hero .btn-primary {
+  display: inline-block;
+  margin-top: 1.5rem;
+  padding: 0.8rem 2rem;
+  background: var(--primary);
+  color: #ffffff;
+  text-decoration: none;
+  border-radius: 30px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+}
+.hero .btn-primary:hover {
+  background: var(--primary-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(2, 132, 199, 0.35);
+}
+.card-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+}
+.home-container h1,
+.home-container h2 {
+  margin-bottom: 0.75rem;
+  color: var(--text-main);
+  padding-bottom: 0.5rem;
+}
