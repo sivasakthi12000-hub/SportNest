@@ -26,7 +26,11 @@ const Tournaments = () => {
   // Get background image for selected sport
   const getSportBackground = (sportId) => {
     if (!sportId) return null;
-    return getRealSportGround(sportId).groundImage;
+    const currentSport = sports.find((s) => Number(s.id) === Number(sportId));
+    return getRealSportGround(
+      currentSport ? currentSport.name : sportId,
+      currentSport?.image || currentSport?.imageUrl
+    ).groundImage;
   };
 
   // Filter by sport

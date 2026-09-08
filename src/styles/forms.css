@@ -54,11 +54,11 @@ label {
 input,
 select {
   padding: 0.75rem 1rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
   font-size: 1rem;
   font-family: inherit;
-  background: #ffffff;
+  background: rgba(15, 23, 42, 0.6);
   color: var(--text-main);
   transition: all 0.2s ease;
 }
@@ -67,11 +67,12 @@ input:focus,
 select:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+  background: rgba(15, 23, 42, 0.85);
 }
 
 input::placeholder {
-  color: #94a3b8;
+  color: #64748b;
 }
 
 fieldset {
@@ -174,17 +175,18 @@ legend {
 .btn-primary:hover {
   background: var(--primary-hover);
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
 }
 
 .btn-secondary {
-  background: #f1f5f9;
+  background: rgba(30, 41, 59, 0.8);
   color: var(--text-main);
   border: 1px solid var(--border-color);
 }
 
 .btn-secondary:hover {
-  background: #e2e8f0;
+  background: rgba(51, 65, 85, 0.9);
+  color: #ffffff;
 }
 
 /* Success Message */

@@ -69,6 +69,9 @@ const TournamentCard = ({ tournament, sportName }) => {
           className="card-bg-photo"
           referrerPolicy="no-referrer"
           loading="lazy"
+          onError={(e) => {
+            e.target.src = "https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=1600&auto=format&fit=crop";
+          }}
         />
         <div className="card-bg-scrim" />
         <div className="card-bg-vignette" />

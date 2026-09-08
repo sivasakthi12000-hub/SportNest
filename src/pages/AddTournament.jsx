@@ -1,16 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { createTournament } from "../services/dataService";
+import { createTournament, getSports } from "../services/dataService";
 import "../styles/forms.css";
 
 const AddTournament = () => {
   const navigate = useNavigate();
+  const [sports, setSports] = useState([]);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [formData, setFormData] = useState({
     name: "",
-    sportId: "1",
+    sportId: "",
     location: "",
     state: "",
     district: "",
@@ -23,6 +24,22 @@ const AddTournament = () => {
     bannerUrl: "",
     posterImage: null,
   });
+
+  useEffect(() => {
+    let isMounted = true;
+    getSports().then((data) => {
+      if (isMounted && data && data.length > 0) {
+        setSports(data);
+        setFormData((prev) => ({
+          ...prev,
+          sportId: prev.sportId || String(data[0].id),
+        }));
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -120,9 +137,11 @@ const AddTournament = () => {
               required
             >
               <option value="">Select Sport</option>
-              <option value="4">Cricket</option>
-              <option value="1">Football</option>
-              <option value="6">Volleyball</option>
+              {sports.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
             </select>
           </div>
         </div>

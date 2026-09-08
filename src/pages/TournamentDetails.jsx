@@ -29,28 +29,29 @@ const TournamentDetails = () => {
     loadData();
   }, [id]);
 
-  const groupA = teams.slice(0, 8);
-  const groupB = teams.slice(8, 16);
+  const groupA = teams.filter((t) => t.group === "A" || (!t.group && teams.indexOf(t) % 2 === 0));
+  const groupB = teams.filter((t) => t.group === "B" || (!t.group && teams.indexOf(t) % 2 === 1));
 
-  // Hardcoded points for league stage (assuming 7 matches each, win=2 points)
-  const generatePointsTable = (groupTeams) => {
-    const points = [
-      { name: groupTeams[0]?.name || "TBD", played: 7, won: 5, lost: 2, points: 10 },
-      { name: groupTeams[1]?.name || "TBD", played: 7, won: 4, lost: 3, points: 8 },
-      { name: groupTeams[2]?.name || "TBD", played: 7, won: 4, lost: 3, points: 8 },
-      { name: groupTeams[3]?.name || "TBD", played: 7, won: 4, lost: 3, points: 8 },
-      { name: groupTeams[4]?.name || "TBD", played: 7, won: 3, lost: 4, points: 6 },
-      { name: groupTeams[5]?.name || "TBD", played: 7, won: 3, lost: 4, points: 6 },
-      { name: groupTeams[6]?.name || "TBD", played: 7, won: 3, lost: 4, points: 6 },
-      { name: groupTeams[7]?.name || "TBD", played: 7, won: 2, lost: 5, points: 4 },
-    ];
-    return points.filter((p) => p.name !== "TBD");
+  // Compute standings table directly from real Supabase team data
+  const computeStandings = (groupTeams) => {
+    return groupTeams.map((team) => {
+      const played = Number(team.played) || 0;
+      const won = Number(team.won) || 0;
+      const lost = Number(team.lost) || 0;
+      const points = Number(team.points) || (won * 2);
+      return {
+        id: team.id,
+        name: team.name,
+        played,
+        won,
+        lost,
+        points,
+      };
+    }).sort((a, b) => b.points - a.points || b.won - a.won);
   };
 
-  const groupAPoints = generatePointsTable(groupA);
-  const groupBPoints = generatePointsTable(groupB);
-  const sortedGroupA = groupAPoints.sort((a, b) => b.points - a.points);
-  const sortedGroupB = groupBPoints.sort((a, b) => b.points - a.points);
+  const sortedGroupA = computeStandings(groupA);
+  const sortedGroupB = computeStandings(groupB);
 
   if (loading) {
     return (
@@ -124,80 +125,112 @@ const TournamentDetails = () => {
 
       <div className="group-stage">
         <h2>Group Stage</h2>
-        <div className="groups-grid">
-          <div className="group">
-            <h3>Group A</h3>
-            <ul>
-              {groupA.map((team) => (
-                <li key={team.id}>{team.name}</li>
-              ))}
-            </ul>
+        {teams.length === 0 ? (
+          <div className="no-data-msg" style={{ padding: "1.5rem", textAlign: "center", background: "var(--card-bg)", borderRadius: "8px", border: "1px solid var(--border-color)" }}>
+            <p style={{ margin: 0, color: "var(--text-muted)" }}>No teams registered yet. Be the first to register a team!</p>
           </div>
-          <div className="group">
-            <h3>Group B</h3>
-            <ul>
-              {groupB.map((team) => (
-                <li key={team.id}>{team.name}</li>
-              ))}
-            </ul>
+        ) : (
+          <div className="groups-grid">
+            <div className="group">
+              <h3>Group A</h3>
+              <ul>
+                {groupA.length > 0 ? (
+                  groupA.map((team) => (
+                    <li key={team.id}><Link to={`/team/${team.id}`}>{team.name}</Link></li>
+                  ))
+                ) : (
+                  <li style={{ color: "var(--text-muted)" }}>No teams assigned yet</li>
+                )}
+              </ul>
+            </div>
+            <div className="group">
+              <h3>Group B</h3>
+              <ul>
+                {groupB.length > 0 ? (
+                  groupB.map((team) => (
+                    <li key={team.id}><Link to={`/team/${team.id}`}>{team.name}</Link></li>
+                  ))
+                ) : (
+                  <li style={{ color: "var(--text-muted)" }}>No teams assigned yet</li>
+                )}
+              </ul>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="points-stage">
         <h2>Points Table</h2>
-        <div className="points-tables">
-          <div className="points-table">
-            <h4>Group A</h4>
-            <table>
-              <thead>
-                <tr>
-                  <th>Team</th>
-                  <th>Played</th>
-                  <th>Won</th>
-                  <th>Lost</th>
-                  <th>Points</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedGroupA.map((team, index) => (
-                  <tr key={index}>
-                    <td>{team.name}</td>
-                    <td>{team.played}</td>
-                    <td>{team.won}</td>
-                    <td>{team.lost}</td>
-                    <td>{team.points}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {teams.length === 0 ? (
+          <div className="no-data-msg" style={{ padding: "1.5rem", textAlign: "center", background: "var(--card-bg)", borderRadius: "8px", border: "1px solid var(--border-color)" }}>
+            <p style={{ margin: 0, color: "var(--text-muted)" }}>Standings will update live as teams register and play.</p>
           </div>
-          <div className="points-table">
-            <h4>Group B</h4>
-            <table>
-              <thead>
-                <tr>
-                  <th>Team</th>
-                  <th>Played</th>
-                  <th>Won</th>
-                  <th>Lost</th>
-                  <th>Points</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedGroupB.map((team, index) => (
-                  <tr key={index}>
-                    <td>{team.name}</td>
-                    <td>{team.played}</td>
-                    <td>{team.won}</td>
-                    <td>{team.lost}</td>
-                    <td>{team.points}</td>
+        ) : (
+          <div className="points-tables">
+            <div className="points-table">
+              <h4>Group A Standings</h4>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Team</th>
+                    <th>Played</th>
+                    <th>Won</th>
+                    <th>Lost</th>
+                    <th>Points</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sortedGroupA.length > 0 ? (
+                    sortedGroupA.map((team, index) => (
+                      <tr key={index}>
+                        <td><Link to={`/team/${team.id}`}>{team.name}</Link></td>
+                        <td>{team.played}</td>
+                        <td>{team.won}</td>
+                        <td>{team.lost}</td>
+                        <td><strong>{team.points}</strong></td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: "center", color: "var(--text-muted)" }}>No teams in Group A</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="points-table">
+              <h4>Group B Standings</h4>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Team</th>
+                    <th>Played</th>
+                    <th>Won</th>
+                    <th>Lost</th>
+                    <th>Points</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedGroupB.length > 0 ? (
+                    sortedGroupB.map((team, index) => (
+                      <tr key={index}>
+                        <td><Link to={`/team/${team.id}`}>{team.name}</Link></td>
+                        <td>{team.played}</td>
+                        <td>{team.won}</td>
+                        <td>{team.lost}</td>
+                        <td><strong>{team.points}</strong></td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: "center", color: "var(--text-muted)" }}>No teams in Group B</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="actions-section">

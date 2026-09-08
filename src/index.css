@@ -1,19 +1,31 @@
 :root {
-  /* Bright, modern athletic theme palette */
-  --bg-color: #f8fafc;        /* bright, clean slate-50 background */
-  --card-bg: #ffffff;         /* pure white surfaces */
-  --card-border: #e2e8f0;     /* refined light border */
-  --primary: #0284c7;         /* vibrant athletic ocean blue */
-  --primary-hover: #0369a1;   /* deep rich blue on hover */
-  --primary-light: #e0f2fe;   /* soft sky tint */
-  --accent: #16a34a;          /* fresh energetic sports green */
-  --accent-hover: #15803d;    /* deep emerald on hover */
-  --accent-light: #dcfce7;    /* light green badge background */
-  --text-main: #0f172a;       /* deep crisp slate for high-contrast readability */
-  --text-muted: #64748b;      /* elegant secondary text */
-  --border-color: #e2e8f0;    /* clean light divider */
-  --input-bg: #ffffff;        /* form input surface */
-  --danger: #ef4444;          /* alert red */
+  /* Energetic Sports Field Theme Palette */
+  --bg-color: #080f17;        /* deep stadium turf dark canvas */
+  --bg-surface: #0e1824;      /* athletic surface container */
+  --card-bg: #111d2c;         /* stadium glass / card background */
+  --card-border: rgba(16, 185, 129, 0.2); /* subtle pitch green border */
+  
+  /* Vibrant Pitch & Turf Accents */
+  --pitch-green: #10b981;     /* energetic stadium pitch emerald */
+  --pitch-neon: #22c55e;      /* electric grass neon */
+  --pitch-glow: rgba(16, 185, 129, 0.4);
+  --pitch-dark: #064e3b;      /* deep turf shadow */
+  
+  --primary: #10b981;         /* energetic sports green primary */
+  --primary-hover: #059669;   /* intense turf green hover */
+  --primary-light: rgba(16, 185, 129, 0.15); /* light pitch green tint */
+  
+  --accent: #22c55e;          /* vibrant athletic turf highlight */
+  --accent-hover: #16a34a;    /* deep emerald */
+  --accent-light: rgba(34, 197, 94, 0.2);
+  --accent-cyan: #06b6d4;     /* electric stadium floodlight cyan */
+  --accent-gold: #f59e0b;     /* championship trophy gold */
+  
+  --text-main: #f8fafc;       /* crisp floodlight white for high contrast */
+  --text-muted: #94a3b8;      /* elegant secondary athletic slate */
+  --border-color: rgba(255, 255, 255, 0.1);
+  --input-bg: #0c1420;        /* form input dark turf surface */
+  --danger: #ef4444;          /* alert / foul red */
 }
 
 body {
@@ -25,6 +37,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background: var(--bg-color);
   color: var(--text-main);
+  min-height: 100vh;
 }
 
 code {
@@ -38,22 +51,25 @@ code {
 }
 
 a {
-  color: var(--primary);
+  color: var(--pitch-green);
   text-decoration: none;
   transition: all 0.2s ease;
 }
 
 a:hover {
-  color: var(--primary-hover);
+  color: var(--pitch-neon);
 }
 
 /* Global card hover style */
 .card {
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
 }
 
 .card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 10px 25px rgba(2, 132, 199, 0.12);
-  border-color: rgba(2, 132, 199, 0.35);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.45);
 }
+

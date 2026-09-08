@@ -29,8 +29,8 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 .card:hover {
-  box-shadow: 0 10px 25px rgba(2, 132, 199, 0.12);
-  border-color: rgba(2, 132, 199, 0.4);
+  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.45);
 }
 .card-content {
   padding: 1.25rem;
@@ -61,7 +61,7 @@
 .btn-details:hover {
   background: var(--primary-hover);
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
 }
 .actions a {
   margin-right: 1rem;
@@ -97,7 +97,7 @@
   background: var(--primary);
   border-color: var(--primary);
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
 }
 
 /* Tournament Page Headings */
@@ -1197,7 +1197,7 @@
 }
 
 .capacity-bar-fill.fill-normal {
-  background: linear-gradient(90deg, #0ea5e9, #38bdf8);
+  background: linear-gradient(90deg, #10b981, #22c55e);
 }
 
 .capacity-bar-fill.fill-medium {
@@ -1219,7 +1219,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  background: linear-gradient(135deg, #9266cc 0%, #7c3aed 100%);
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: #ffffff !important;
   text-decoration: none !important;
   padding: 0.75rem 1rem;
@@ -1228,13 +1228,13 @@
   font-size: 0.9rem;
   letter-spacing: 0.3px;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
   transition: all 0.25s ease;
 }
 
 .btn-tournament-action:hover {
-  background: linear-gradient(135deg, #a078d8 0%, #6d28d9 100%);
+  background: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.55);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.55);
 }
 

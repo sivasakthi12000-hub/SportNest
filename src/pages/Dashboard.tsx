@@ -33,6 +33,7 @@ import {
   DollarSign,
   Filter,
   ExternalLink,
+  RefreshCw,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -42,6 +43,13 @@ import {
   Tournament,
   Sport,
 } from "../services/dataService";
+import { AdminTournamentsView } from "../components/admin/AdminTournamentsView";
+import { AdminTeamsView } from "../components/admin/AdminTeamsView";
+import { AdminSportsView } from "../components/admin/AdminSportsView";
+import { AdminBracketsView } from "../components/admin/AdminBracketsView";
+import { AdminRegistrationsView } from "../components/admin/AdminRegistrationsView";
+import { AdminLeaderboardView } from "../components/admin/AdminLeaderboardView";
+import { AdminCreateTournamentModal } from "../components/admin/AdminCreateTournamentModal";
 import "../styles/admin-dashboard.css";
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -75,6 +83,8 @@ const Dashboard: React.FC = () => {
   const [chartYear, setChartYear] = useState("2026");
   const [selectedMenu, setSelectedMenu] = useState("dashboard");
   const [activeBarIndex, setActiveBarIndex] = useState<number>(7); // Default to August (index 7) as in the reference image
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [teamTournamentFilter, setTeamTournamentFilter] = useState<number | null>(null);
 
   // Protect Dashboard: only accessible when authenticated
   useEffect(() => {
@@ -84,38 +94,28 @@ const Dashboard: React.FC = () => {
   }, [isAuthenticated, navigate]);
 
   // Fetch live Supabase data
-  useEffect(() => {
-    let isMounted = true;
-    async function fetchSupabaseData() {
-      setLoading(true);
-      setError(null);
-      try {
-        const [tourneysList, sportsList, exactTeams] = await Promise.all([
-          getTournaments(),
-          getSports(),
-          getTotalTeamsCount(),
-        ]);
-        if (isMounted) {
-          setTournaments(tourneysList);
-          setSports(sportsList);
-          setTotalTeamsExact(exactTeams);
-        }
-      } catch (err: any) {
-        console.error("Failed to fetch live data from Supabase:", err);
-        if (isMounted) {
-          setError(err?.message || "Failed to load database records.");
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
+  const fetchSupabaseData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [tourneysList, sportsList, exactTeams] = await Promise.all([
+        getTournaments(),
+        getSports(),
+        getTotalTeamsCount(),
+      ]);
+      setTournaments(tourneysList);
+      setSports(sportsList);
+      setTotalTeamsExact(exactTeams);
+    } catch (err: any) {
+      console.error("Failed to fetch live data from Supabase:", err);
+      setError(err?.message || "Failed to load database records.");
+    } finally {
+      setLoading(false);
     }
+  };
 
+  useEffect(() => {
     fetchSupabaseData();
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   // Format money based on selected currency
@@ -271,12 +271,20 @@ const Dashboard: React.FC = () => {
             ========================================================= */}
         <aside className={`dash-sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
           <div className="dash-sidebar-header">
-            <Link to="/" className="dash-logo-block">
+            <button
+              onClick={() => {
+                setSelectedMenu("dashboard");
+                setTeamTournamentFilter(null);
+              }}
+              className="dash-logo-block"
+              style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 }}
+              title="Dashboard Home"
+            >
               <div className="dash-logo-icon">
                 <span>⚡</span>
               </div>
               {!sidebarCollapsed && <span className="dash-logo-title">ArenaSync</span>}
-            </Link>
+            </button>
 
             <button
               className="dash-collapse-btn"
@@ -288,14 +296,18 @@ const Dashboard: React.FC = () => {
             </button>
           </div>
 
-          {/* MAIN MENU */}
+          {/* ADMIN MENU - STRICTLY: Dashboard, teams, sports, logout */}
           <div className="dash-nav-section">
-            {!sidebarCollapsed && <div className="dash-nav-heading">MAIN MENU</div>}
+            {!sidebarCollapsed && <div className="dash-nav-heading">ADMIN MENU</div>}
             <ul className="dash-nav-list">
               <li>
                 <button
                   className={`dash-nav-item ${selectedMenu === "dashboard" ? "active" : ""}`}
-                  onClick={() => setSelectedMenu("dashboard")}
+                  onClick={() => {
+                    setSelectedMenu("dashboard");
+                    setTeamTournamentFilter(null);
+                  }}
+                  id="admin-nav-dashboard"
                 >
                   <div className="dash-nav-left-part">
                     <LayoutDashboard size={18} />
@@ -305,119 +317,42 @@ const Dashboard: React.FC = () => {
               </li>
 
               <li>
-                <Link
-                  to="/tournaments"
-                  className={`dash-nav-item ${selectedMenu === "tournaments" ? "active" : ""}`}
-                  onClick={() => setSelectedMenu("tournaments")}
-                >
-                  <div className="dash-nav-left-part">
-                    <Trophy size={18} />
-                    {!sidebarCollapsed && <span>Tournaments</span>}
-                  </div>
-                  {!sidebarCollapsed && (
-                    <span className="dash-nav-badge">{tournaments.length || "..."}</span>
-                  )}
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  to="/tournaments"
+                <button
                   className={`dash-nav-item ${selectedMenu === "teams" ? "active" : ""}`}
-                  onClick={() => setSelectedMenu("teams")}
+                  onClick={() => {
+                    setSelectedMenu("teams");
+                    setTeamTournamentFilter(null);
+                  }}
+                  id="admin-nav-teams"
                 >
                   <div className="dash-nav-left-part">
                     <Users size={18} />
-                    {!sidebarCollapsed && <span>Teams</span>}
+                    {!sidebarCollapsed && <span>teams</span>}
                   </div>
                   {!sidebarCollapsed && (
                     <span className="dash-nav-badge">
                       {totalTeamsExact ? totalTeamsExact.toLocaleString() : stats.registeredTeamsSum}
                     </span>
                   )}
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  to="/sports"
-                  className={`dash-nav-item ${selectedMenu === "sports" ? "active" : ""}`}
-                  onClick={() => setSelectedMenu("sports")}
-                >
-                  <div className="dash-nav-left-part">
-                    <Award size={18} />
-                    {!sidebarCollapsed && <span>Sports</span>}
-                  </div>
-                  {!sidebarCollapsed && (
-                    <span className="dash-nav-badge">{sports.length || "11"}</span>
-                  )}
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* FEATURES */}
-          <div className="dash-nav-section">
-            {!sidebarCollapsed && <div className="dash-nav-heading">FEATURES</div>}
-            <ul className="dash-nav-list">
-              <li>
-                <Link to="/tournaments" className="dash-nav-item">
-                  <div className="dash-nav-left-part">
-                    <Repeat size={18} />
-                    {!sidebarCollapsed && <span>Brackets</span>}
-                  </div>
-                  {!sidebarCollapsed && <span className="dash-nav-badge">16</span>}
-                </Link>
-              </li>
-
-              <li>
-                <Link to="/tournaments" className="dash-nav-item">
-                  <div className="dash-nav-left-part">
-                    <CreditCard size={18} />
-                    {!sidebarCollapsed && <span>Registrations</span>}
-                  </div>
-                </Link>
-              </li>
-
-              <li>
-                <Link to="/sports" className="dash-nav-item">
-                  <div className="dash-nav-left-part">
-                    <MessageSquare size={18} />
-                    {!sidebarCollapsed && <span>Leaderboard</span>}
-                  </div>
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* GENERAL */}
-          <div className="dash-nav-section">
-            {!sidebarCollapsed && <div className="dash-nav-heading">GENERAL</div>}
-            <ul className="dash-nav-list">
-              <li>
-                <Link to="/" className="dash-nav-item" title="Return to Main Website">
-                  <div className="dash-nav-left-part">
-                    <ExternalLink size={18} />
-                    {!sidebarCollapsed && <span>Main Website</span>}
-                  </div>
-                </Link>
-              </li>
-
-              <li>
-                <button className="dash-nav-item">
-                  <div className="dash-nav-left-part">
-                    <Settings size={18} />
-                    {!sidebarCollapsed && <span>Settings</span>}
-                  </div>
                 </button>
               </li>
 
               <li>
-                <button className="dash-nav-item">
+                <button
+                  className={`dash-nav-item ${selectedMenu === "sports" ? "active" : ""}`}
+                  onClick={() => {
+                    setSelectedMenu("sports");
+                    setTeamTournamentFilter(null);
+                  }}
+                  id="admin-nav-sports"
+                >
                   <div className="dash-nav-left-part">
-                    <HelpCircle size={18} />
-                    {!sidebarCollapsed && <span>Help Desk</span>}
+                    <Award size={18} />
+                    {!sidebarCollapsed && <span>sports</span>}
                   </div>
+                  {!sidebarCollapsed && (
+                    <span className="dash-nav-badge">{sports.length || "11"}</span>
+                  )}
                 </button>
               </li>
 
@@ -428,32 +363,17 @@ const Dashboard: React.FC = () => {
                     logout();
                     navigate("/login");
                   }}
-                  title="Logout session"
+                  title="Logout and remove token from JSON"
+                  id="admin-nav-logout"
                 >
                   <div className="dash-nav-left-part" style={{ color: "#ef4444" }}>
                     <LogOut size={18} />
-                    {!sidebarCollapsed && <span>Log out</span>}
+                    {!sidebarCollapsed && <span style={{ color: "#ef4444", fontWeight: 600 }}>logout</span>}
                   </div>
                 </button>
               </li>
             </ul>
           </div>
-
-          {/* Bottom Upgrade Pro Banner */}
-          {!sidebarCollapsed && (
-            <div className="dash-upgrade-banner">
-              <div className="dash-upgrade-title">
-                <span>Upgrade Pro!</span>
-                <span>👑</span>
-              </div>
-              <p className="dash-upgrade-desc">
-                Higher productivity with better organization & automated brackets
-              </p>
-              <Link to="/add-tournament" className="dash-upgrade-btn">
-                <span>👑 Add Tournament</span>
-              </Link>
-            </div>
-          )}
         </aside>
 
         {/* =========================================================
@@ -475,7 +395,56 @@ const Dashboard: React.FC = () => {
             </div>
 
             <div className="dash-header-actions">
-              <button className="dash-icon-btn" title="Help & Documentation">
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="admin-btn-primary"
+                style={{
+                  padding: "0.45rem 0.9rem",
+                  fontSize: "0.82rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                }}
+              >
+                <Plus size={15} />
+                <span>+ Create Tournament</span>
+              </button>
+
+              <a
+                href="/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="admin-btn-secondary"
+                style={{
+                  padding: "0.45rem 0.85rem",
+                  fontSize: "0.82rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  borderRadius: "8px",
+                  textDecoration: "none",
+                }}
+                title="Preview public customer site in new tab"
+              >
+                <ExternalLink size={14} />
+                <span>Public Site ↗</span>
+              </a>
+
+              <button
+                className="dash-icon-btn"
+                onClick={() => fetchSupabaseData()}
+                title="Refresh Supabase Database"
+              >
+                <RefreshCw size={18} />
+              </button>
+
+              <button
+                className="dash-icon-btn"
+                onClick={() => setSelectedMenu("help")}
+                title="Help & Operations Guide"
+              >
                 <HelpCircle size={18} />
               </button>
 
@@ -491,43 +460,238 @@ const Dashboard: React.FC = () => {
 
               <div
                 className="dash-user-profile"
-                onClick={() => navigate("/dashboard")}
-                title="Active Account: admin123"
+                id="right-corner-admin-profile"
+                style={{ cursor: "default" }}
               >
                 <div className="dash-avatar">
                   <span>A</span>
                 </div>
                 <div className="dash-user-meta">
-                  <span className="dash-user-name">{user?.username || "admin123"}</span>
+                  <span className="dash-user-name">{user?.username || "admin"}</span>
                 </div>
-                <ChevronDown size={14} color="#94a3b8" />
-              </div>
-            </div>
-          </div>
-
-          {/* Subheader: Welcome Message & Export Button */}
-          <div className="dash-welcome-row">
-            <div>
-              <h1 className="dash-welcome-title">
-                Welcome back {user?.name || "Sajibur Rahman" /* Or admin123 */}
-              </h1>
-              <p className="dash-welcome-sub">
-                Monitor and control what happens with your tournaments and prize pools from Supabase.
-              </p>
-            </div>
-
-            <div className="dash-welcome-right">
-              <div className="dash-date-pill">
-                <Calendar size={15} color="#059669" />
-                <span>{todayFormatted}</span>
               </div>
 
-              <button onClick={handleExportCSV} className="dash-export-btn" title="Export Supabase Tournaments to CSV">
-                <Download size={15} />
-                <span>Export</span>
+              <button
+                onClick={() => {
+                  logout();
+                  navigate("/login");
+                }}
+                id="right-corner-logout-btn"
+                className="dash-logout-btn"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.45rem",
+                  padding: "0.5rem 0.9rem",
+                  borderRadius: "8px",
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  color: "#dc2626",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                }}
+                title="Logout and remove token from backend JSON"
+              >
+                <LogOut size={16} />
+                <span>Logout</span>
               </button>
             </div>
           </div>
+
+          {/* =========================================================
+              DEDICATED SUB-VIEW SWITCHER
+              Keeps admin inside the dedicated dashboard context!
+              ========================================================= */}
+          {selectedMenu === "tournaments" && (
+            <AdminTournamentsView
+              tournaments={tournaments}
+              sports={sports}
+              formatMoney={formatMoney}
+              onRefresh={fetchSupabaseData}
+              onOpenCreate={() => setShowCreateModal(true)}
+              onViewTeams={(tourneyId) => {
+                setTeamTournamentFilter(tourneyId);
+                setSelectedMenu("teams");
+              }}
+            />
+          )}
+
+          {selectedMenu === "teams" && (
+            <AdminTeamsView
+              tournaments={tournaments}
+              initialTournamentFilter={teamTournamentFilter}
+              onRefreshParentCounts={fetchSupabaseData}
+            />
+          )}
+
+          {selectedMenu === "sports" && (
+            <AdminSportsView
+              sports={sports}
+              onRefresh={fetchSupabaseData}
+            />
+          )}
+
+          {selectedMenu === "brackets" && (
+            <AdminBracketsView
+              tournaments={tournaments}
+            />
+          )}
+
+          {selectedMenu === "registrations" && (
+            <AdminRegistrationsView
+              tournaments={tournaments}
+              formatMoney={formatMoney}
+              onRefresh={fetchSupabaseData}
+              onViewTeams={(tourneyId) => {
+                setTeamTournamentFilter(tourneyId);
+                setSelectedMenu("teams");
+              }}
+            />
+          )}
+
+          {selectedMenu === "leaderboard" && (
+            <AdminLeaderboardView
+              tournaments={tournaments}
+            />
+          )}
+
+          {selectedMenu === "settings" && (
+            <div className="admin-view-container">
+              <div className="admin-view-header">
+                <div className="admin-view-title-group">
+                  <h1>Administrator Settings & Database Health</h1>
+                  <p>Manage system preferences, database sync status, and currency configurations.</p>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: "1.5rem" }}>
+                <div className="admin-data-card">
+                  <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#0f172a", marginBottom: "1rem" }}>
+                    Active Admin Account
+                  </h3>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                    <div>
+                      <label style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>Username</label>
+                      <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.95rem" }}>{user?.username || "admin123"}</div>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>Email Address</label>
+                      <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.95rem" }}>{user?.email || "sivasakthi12000@gmail.com"}</div>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>System Role</label>
+                      <div>
+                        <span style={{ display: "inline-block", background: "#fef3c7", color: "#b45309", padding: "0.2rem 0.6rem", borderRadius: "6px", fontSize: "0.8rem", fontWeight: 800 }}>
+                          SUPER ADMIN
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="admin-data-card">
+                  <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#0f172a", marginBottom: "1rem" }}>
+                    Supabase Database Connection
+                  </h3>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#10b981", display: "inline-block" }}></span>
+                      <span style={{ fontWeight: 700, color: "#059669" }}>Supabase Live Connected</span>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>Database Type</label>
+                      <div style={{ fontWeight: 600, color: "#0f172a" }}>PostgreSQL Cloud via @supabase/supabase-js</div>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>Current Records</label>
+                      <div style={{ fontWeight: 600, color: "#0f172a" }}>
+                        {tournaments.length} Tournaments | {sports.length} Sports | {totalTeamsExact} Registered Teams
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => fetchSupabaseData()}
+                      className="admin-btn-secondary"
+                      style={{ marginTop: "0.5rem", width: "fit-content" }}
+                    >
+                      <RefreshCw size={14} />
+                      <span>Test Connection & Sync</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {selectedMenu === "help" && (
+            <div className="admin-view-container">
+              <div className="admin-view-header">
+                <div className="admin-view-title-group">
+                  <h1>Admin Operations & System Guide</h1>
+                  <p>Operational instructions for managing tournaments, teams, and Supabase data.</p>
+                </div>
+              </div>
+
+              <div className="admin-data-card">
+                <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                  <div>
+                    <h4 style={{ color: "#059669", fontWeight: 800, margin: "0 0 0.25rem 0" }}>
+                      1. Direct Supabase Data Source
+                    </h4>
+                    <p style={{ color: "#475569", margin: 0, fontSize: "0.9rem" }}>
+                      All operations executed in the Admin Dashboard (creating tournaments, updating statuses, adding teams, generating brackets) query and commit mutations directly to the Supabase database.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 style={{ color: "#059669", fontWeight: 800, margin: "0 0 0.25rem 0" }}>
+                      2. Dedicated Administrative Sub-System
+                    </h4>
+                    <p style={{ color: "#475569", margin: 0, fontSize: "0.9rem" }}>
+                      The sidebar navigation preserves your administrative session context without bouncing back to public user pages. You can manage Tournaments, Squads/Teams, Sports Disciplines, Brackets, and Audit Registrations in one place.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 style={{ color: "#059669", fontWeight: 800, margin: "0 0 0.25rem 0" }}>
+                      3. Public Website Link
+                    </h4>
+                    <p style={{ color: "#475569", margin: 0, fontSize: "0.9rem" }}>
+                      To inspect how the public customer home page looks, click <strong>"Public Website ↗"</strong> in the sidebar or top bar to open it in a new tab without losing your admin dashboard workspace.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MAIN DASHBOARD OVERVIEW */}
+          {selectedMenu === "dashboard" && (
+            <>
+              {/* Subheader: Welcome Message & Export Button */}
+              <div className="dash-welcome-row">
+                <div>
+                  <h1 className="dash-welcome-title">
+                    Welcome back {user?.name || "Sajibur Rahman" /* Or admin123 */}
+                  </h1>
+                  <p className="dash-welcome-sub">
+                    Monitor and control what happens with your tournaments and prize pools from Supabase.
+                  </p>
+                </div>
+
+                <div className="dash-welcome-right">
+                  <div className="dash-date-pill">
+                    <Calendar size={15} color="#059669" />
+                    <span>{todayFormatted}</span>
+                  </div>
+
+                  <button onClick={handleExportCSV} className="dash-export-btn" title="Export Supabase Tournaments to CSV">
+                    <Download size={15} />
+                    <span>Export</span>
+                  </button>
+                </div>
+              </div>
 
           {/* =========================================================
               TOP 3 METRIC CARDS
@@ -573,15 +737,26 @@ const Dashboard: React.FC = () => {
 
               {/* Two Action buttons matching the image: Send Money & Request Money style */}
               <div className="dash-card-actions-row">
-                <Link to="/add-tournament" className="dash-btn-primary-pill">
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="dash-btn-primary-pill"
+                  style={{ border: "none", cursor: "pointer" }}
+                >
                   <ArrowUpRight size={16} />
                   <span>Create Tournament</span>
-                </Link>
+                </button>
 
-                <Link to="/tournaments" className="dash-btn-secondary-pill">
+                <button
+                  onClick={() => {
+                    setSelectedMenu("teams");
+                    setTeamTournamentFilter(null);
+                  }}
+                  className="dash-btn-secondary-pill"
+                  style={{ border: "none", cursor: "pointer" }}
+                >
                   <ArrowDownLeft size={16} />
                   <span>Register Team</span>
-                </Link>
+                </button>
               </div>
             </div>
 
@@ -652,10 +827,14 @@ const Dashboard: React.FC = () => {
             <div className="dash-panel-card">
               <div className="dash-panel-header">
                 <h2 className="dash-panel-title">Tournaments by Sport</h2>
-                <Link to="/sports" className="dash-add-btn">
+                <button
+                  onClick={() => setSelectedMenu("sports")}
+                  className="dash-add-btn"
+                  style={{ border: "none", cursor: "pointer" }}
+                >
                   <Plus size={14} />
                   <span>View All</span>
-                </Link>
+                </button>
               </div>
 
               <div className="dash-wallet-grid">
@@ -954,13 +1133,15 @@ const Dashboard: React.FC = () => {
                               </span>
                             </td>
                             <td>
-                              <Link
-                                to={`/tournament/${t.id}`}
+                              <a
+                                href={`/tournament/${t.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="dash-three-dots"
-                                title="View Tournament Details"
+                                title="Preview Tournament Page in New Tab"
                               >
                                 <ExternalLink size={14} />
-                              </Link>
+                              </a>
                             </td>
                           </tr>
                         );
@@ -971,9 +1152,22 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
           </div>
-        </main>
-      </div>
-    </div>
+        </>
+      )}
+    </main>
+  </div>
+
+  {/* Supabase Connected Create Tournament Modal */}
+  {showCreateModal && (
+    <AdminCreateTournamentModal
+      sports={sports}
+      onClose={() => setShowCreateModal(false)}
+      onSuccess={() => {
+        fetchSupabaseData();
+      }}
+    />
+  )}
+</div>
   );
 };
 

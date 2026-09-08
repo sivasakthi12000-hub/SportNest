@@ -19,7 +19,7 @@ export const REAL_SPORT_GROUNDS: Record<string, SportGroundAsset> = {
     sportId: 1,
     sportName: "Soccer",
     groundImage:
-      "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=1600&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522778119026-d647f0596c20?q=80&w=1600&auto=format&fit=crop",
     stadiumName: "Camp Nou / Wembley Stadium",
     surfaceDescription: "FIFA Standard Floodlit Grass Pitch",
   },
@@ -27,7 +27,7 @@ export const REAL_SPORT_GROUNDS: Record<string, SportGroundAsset> = {
     sportId: 1,
     sportName: "Soccer",
     groundImage:
-      "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=1600&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=1600&auto=format&fit=crop",
     stadiumName: "Wembley International Pitch",
     surfaceDescription: "Hybrid Natural Turf Pitch",
   },
@@ -59,7 +59,15 @@ export const REAL_SPORT_GROUNDS: Record<string, SportGroundAsset> = {
     sportId: 5,
     sportName: "Kabaddi",
     groundImage:
-      "https://images.unsplash.com/photo-1517649763962-0c623266ddc0?q=80&w=1600&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1600&auto=format&fit=crop",
+    stadiumName: "Thyagaraj Indoor Stadium",
+    surfaceDescription: "13x10m Pro Kabaddi Interlocking Mat",
+  },
+  kabbadi: {
+    sportId: 5,
+    sportName: "Kabaddi",
+    groundImage:
+      "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1600&auto=format&fit=crop",
     stadiumName: "Thyagaraj Indoor Stadium",
     surfaceDescription: "13x10m Pro Kabaddi Interlocking Mat",
   },
@@ -107,11 +115,29 @@ export const REAL_SPORT_GROUNDS: Record<string, SportGroundAsset> = {
 
 /**
  * Returns real ground image for any sport name or sport ID.
+ * If customImage is provided (from Supabase sports table), it takes top priority!
  */
-export function getRealSportGround(sportNameOrId: string | number): SportGroundAsset {
+export function getRealSportGround(
+  sportNameOrId: string | number,
+  customImage?: string
+): SportGroundAsset {
+  // If a valid custom image from Supabase exists, prioritize it directly!
+  if (customImage && typeof customImage === "string" && customImage.trim().length > 0) {
+    const trimmed = customImage.trim();
+    if (trimmed.startsWith("http") || trimmed.startsWith("data:") || trimmed.startsWith("/")) {
+      return {
+        sportId: typeof sportNameOrId === "number" ? sportNameOrId : 0,
+        sportName: typeof sportNameOrId === "string" ? sportNameOrId : "Sports",
+        groundImage: trimmed,
+        stadiumName: "Official Playing Venue",
+        surfaceDescription: "Regulation Sports Surface",
+      };
+    }
+  }
+
   const norm = String(sportNameOrId || "").toLowerCase().trim();
 
-  // Match by name
+  // Match by name or key
   for (const [key, asset] of Object.entries(REAL_SPORT_GROUNDS)) {
     if (norm.includes(key) || norm === String(asset.sportId)) {
       return asset;
@@ -121,9 +147,9 @@ export function getRealSportGround(sportNameOrId: string | number): SportGroundA
   // Fallback to high-res stadium
   return {
     sportId: 0,
-    sportName: typeof sportNameOrId === "string" ? sportNameOrId : "Sports",
+    sportName: typeof sportNameOrId === "string" && sportNameOrId ? sportNameOrId : "Sports",
     groundImage:
-      "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=1600&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=1600&auto=format&fit=crop",
     stadiumName: "International Sports Stadium",
     surfaceDescription: "Professional Regulation Ground",
   };

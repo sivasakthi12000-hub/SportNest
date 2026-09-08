@@ -25,8 +25,8 @@
   transition: all 0.2s ease;
 }
 .card:hover {
-  box-shadow: 0 10px 25px rgba(2, 132, 199, 0.12);
-  border-color: rgba(2, 132, 199, 0.4);
+  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.45);
   transform: translateY(-3px);
 }
 .card-content {
@@ -59,7 +59,7 @@
 .btn-details:hover {
   background: var(--primary-hover);
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
 }
 
 /* Teams Header */
@@ -204,16 +204,18 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 .jersey-number {
-  background: var(--primary);
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: #ffffff;
   width: 48px;
   height: 48px;
-  border-radius: 6px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
   font-size: 1.2rem;
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);
+  border: 1px solid rgba(16, 185, 129, 0.4);
 }
 .player-info {
   flex: 1;
@@ -235,12 +237,13 @@
   border-top: 1px solid var(--border-color);
 }
 .btn-secondary {
-  background: #f1f5f9;
+  background: rgba(30, 41, 59, 0.8);
   color: var(--text-main);
   border: 1px solid var(--border-color);
 }
 .btn-secondary:hover {
-  background: #e2e8f0;
+  background: rgba(51, 65, 85, 0.9);
+  color: #ffffff;
 }
 .not-found {
   padding: 1rem;

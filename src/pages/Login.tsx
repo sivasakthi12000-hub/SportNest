@@ -22,19 +22,24 @@ const Login: React.FC = () => {
     }
   }, [isAuthenticated, navigate]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
 
-    const result = login(username, password);
+    try {
+      const result = await login(username, password);
 
-    if (result.success) {
+      if (result.success) {
+        setIsLoading(false);
+        navigate("/dashboard");
+      } else {
+        setIsLoading(false);
+        setError(result.error || "Authentication failed. Please verify your credentials.");
+      }
+    } catch (err: any) {
       setIsLoading(false);
-      navigate("/dashboard");
-    } else {
-      setIsLoading(false);
-      setError(result.error || "Authentication failed. Please verify your credentials.");
+      setError(err?.message || "An error occurred during authentication.");
     }
   };
 

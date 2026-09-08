@@ -1,17 +1,22 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, ArrowRight, Trophy, Users, Shield, MapPin } from "lucide-react";
-import { SportGroundBackground } from "./SportGroundBackground";
-import { Sport3DAsset } from "./Sport3DAsset";
-import { getSportTheme } from "../data/sportsThemeData";
-import { getRealSportGround } from "../data/sportGroundImages";
+import { ChevronLeft, ChevronRight, ArrowRight, Users, Trophy, Shield, Activity } from "lucide-react";
 import { getTournaments } from "../services/dataService";
+import { getSportCinematicMeta } from "../data/sportCinematicData";
 import "../styles/sport-showcase.css";
 
 export interface SportItem {
   id: number;
   name: string;
   image?: string;
+  imageUrl?: string;
+  bannerUrl?: string;
+  groundName?: string;
+  surface?: string;
+  format?: string;
+  category?: string;
+  rules?: string;
+  description?: string;
 }
 
 interface SportShowcaseHeroProps {
@@ -21,371 +26,284 @@ interface SportShowcaseHeroProps {
 
 export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
   sports,
-  showAllGroundsGrid = true,
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentTime, setCurrentTime] = useState("");
   const [tournamentStats, setTournamentStats] = useState<
-    Record<number, { count: number; prize: number; teams: number; stadiums: string[] }>
+    Record<number, { count: number; prize: number; teams: number }>
   >({});
+  const carouselRef = useRef<HTMLDivElement>(null);
 
-  // Filter out any blank or test sports if needed, or include all
-  const displaySports = sports.length > 0
-    ? sports.filter((s) => !s.name.toLowerCase().includes("test"))
-    : [
-        { id: 1, name: "Soccer" },
-        { id: 2, name: "Basketball" },
-        { id: 3, name: "Tennis" },
-        { id: 4, name: "Cricket" },
-        { id: 5, name: "Kabaddi" },
-        { id: 6, name: "Volleyball" },
-        { id: 7, name: "Hockey" },
-        { id: 8, name: "Badminton" },
-        { id: 9, name: "Table Tennis" },
-        { id: 10, name: "Swimming" },
-      ];
+  // Live time for the top-right live TV badge (matching the Sky TV interface clock)
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      );
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
-  // Fetch real tournament stats from Supabase
+  // Fetch real tournament stats directly from Supabase
   useEffect(() => {
     getTournaments().then((data) => {
       if (Array.isArray(data)) {
-        const stats: Record<number, { count: number; prize: number; teams: number; stadiums: string[] }> = {};
+        const stats: Record<number, { count: number; prize: number; teams: number }> = {};
         data.forEach((t) => {
           const sId = Number(t.sportId);
           if (!stats[sId]) {
-            stats[sId] = { count: 0, prize: 0, teams: 0, stadiums: [] };
+            stats[sId] = { count: 0, prize: 0, teams: 0 };
           }
           stats[sId].count++;
           stats[sId].prize += Number(t.prizeAmount) || 0;
           stats[sId].teams += Number(t.registeredTeams) || 0;
-          if (t.groundName && !stats[sId].stadiums.includes(t.groundName)) {
-            stats[sId].stadiums.push(t.groundName);
-          }
         });
         setTournamentStats(stats);
       }
     });
   }, []);
 
+  const displaySports = sports && sports.length > 0 ? sports : [];
+
+  const handleScrollLeft = () => {
+    if (carouselRef.current) {
+      carouselRef.current.scrollBy({ left: -240, behavior: "smooth" });
+    }
+  };
+
+  const handleScrollRight = () => {
+    if (carouselRef.current) {
+      carouselRef.current.scrollBy({ left: 240, behavior: "smooth" });
+    }
+  };
+
+  const handleSelectSport = (index: number) => {
+    setCurrentIndex(index);
+    // Scroll the selected card into view in the carousel
+    if (carouselRef.current) {
+      const card = carouselRef.current.children[index] as HTMLElement;
+      if (card) {
+        card.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      }
+    }
+  };
+
+  if (displaySports.length === 0) {
+    return (
+      <div className="cinematic-tv-container" style={{ padding: "4rem 1.5rem", textAlign: "center" }}>
+        <div style={{ maxWidth: "560px", margin: "0 auto", background: "rgba(15, 23, 42, 0.8)", padding: "2.5rem", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.1)" }}>
+          <div className="live-pulse-indicator" style={{ margin: "0 auto 1rem" }} />
+          <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "0.75rem", color: "#f8fafc" }}>
+            Loading ArenaSync Sports...
+          </h2>
+          <p style={{ color: "#94a3b8", fontSize: "0.95rem" }}>
+            Connecting to live Supabase database for sports, grounds, and tournament schedules.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const activeSport = displaySports[currentIndex] || displaySports[0];
-  const theme = getSportTheme(activeSport.name);
-  const realGround = getRealSportGround(activeSport.name);
-  const stats = tournamentStats[activeSport.id] || {
-    count: 15,
-    prize: 1050000,
-    teams: 195,
-    stadiums: [realGround.stadiumName, "Arena Complex"],
-  };
-
-  const handlePrev = () => {
-    setCurrentIndex((prev) => (prev === 0 ? displaySports.length - 1 : prev - 1));
-  };
-
-  const handleNext = () => {
-    setCurrentIndex((prev) => (prev === displaySports.length - 1 ? 0 : prev + 1));
-  };
+  const customImg = activeSport.bannerUrl || activeSport.imageUrl || activeSport.image;
+  const cinematicMeta = getSportCinematicMeta(activeSport.name, customImg);
+  const stats = tournamentStats[activeSport.id] || { count: 0, prize: 0, teams: 0 };
+  const sportDescription = activeSport.description || cinematicMeta.synopsis;
 
   return (
-    <div className="editorial-showcase-wrapper">
-      {/* Main Split-Screen Editorial Showcase Card */}
-      <div className="editorial-card">
-        {/* The 50/50 Split Canvas with Real Ground Images + Tactical Markings + Motion */}
-        <div className="split-screen-canvas">
-          {/* Left 50% - Light Ground Half with Real Playing Ground Photography */}
-          <div className="split-half-light">
-            <img
-              key={`light-${activeSport.id}-${activeSport.name}`}
-              src={realGround.groundImage}
-              alt={`${activeSport.name} Playing Ground`}
-              className="real-ground-photo real-ground-photo-light animate-ken-burns"
-              referrerPolicy="no-referrer"
-            />
-            <div className="ground-photo-overlay-light" />
-            <SportGroundBackground
-              sportName={activeSport.name}
-              variant="showcase"
-            />
+    <div className="cinematic-tv-container">
+      {/* =====================================================================
+          TOP CINEMATIC HERO BANNER (Matches Sky TV / Streaming Header Layout)
+          ===================================================================== */}
+      <section className="cinematic-hero-banner" aria-label={`${activeSport.name} Featured Showcase`}>
+        {/* Backdrop Image Container */}
+        <div className="hero-backdrop-container">
+          <img
+            key={`hero-backdrop-${activeSport.id}-${activeSport.name}`}
+            src={cinematicMeta.bannerImage}
+            alt={`${activeSport.name} Arena Backdrop`}
+            className="hero-backdrop-img animating"
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src =
+                "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?q=80&w=1800&auto=format&fit=crop";
+            }}
+          />
+          {/* Gradient Vignettes to ensure high-contrast readability */}
+          <div className="hero-gradient-overlay" />
+          <div className="hero-bottom-vignette" />
+        </div>
+
+        {/* Top-Right Live Clock Badge (matches 12:25pm in reference photo) */}
+        <div className="hero-live-clock-badge">
+          <span className="live-pulse-indicator" />
+          <span>LIVE ARENA</span>
+          {currentTime && <span style={{ opacity: 0.6 }}>| {currentTime}</span>}
+        </div>
+
+        {/* Content Area on the Left */}
+        <div className="hero-content-column">
+          {/* Category Tag / Network Pill (like sky atlantic) */}
+          <div className="hero-top-meta-row">
+            <span className="hero-network-badge">
+              <span className="network-badge-dot" />
+              {cinematicMeta.badge}
+            </span>
+            <span className="hero-status-pill">
+              <Activity size={13} style={{ color: "#10b981" }} />
+              {stats.count > 0 ? `${stats.count} Tournaments Open` : "Sanctioned Season"}
+            </span>
           </div>
 
-          {/* Right 50% - Dark Ground Half with Real Playing Ground Photography */}
-          <div className="split-half-dark">
-            <img
-              key={`dark-${activeSport.id}-${activeSport.name}`}
-              src={realGround.groundImage}
-              alt={`${activeSport.name} Stadium Arena`}
-              className="real-ground-photo real-ground-photo-dark animate-ken-burns"
-              referrerPolicy="no-referrer"
-            />
-            <div className="ground-photo-overlay-dark" />
-            <SportGroundBackground
-              sportName={activeSport.name}
-              variant="showcase"
-            />
-          </div>
-        </div>
+          {/* Main Display Title */}
+          <h1 className="hero-sport-title">{activeSport.name}</h1>
 
-        {/* Top Header inside the Showcase Card */}
-        <header className="showcase-inner-header">
-          <div className="showcase-brand">
-            <Link to="/" className="showcase-brand-title">
-              ArenaSync
-            </Link>
-            <nav className="showcase-links-light">
-              <Link to="/sports">Sports</Link>
-              <Link to="/tournaments">Tournaments</Link>
-              <Link to="/add-tournament">Register</Link>
-            </nav>
-          </div>
+          {/* Engaging Synopsis */}
+          <p className="hero-synopsis-text">{sportDescription}</p>
 
-          <div className="showcase-links-dark">
-            <span>Tournaments ({stats.count} Live)</span>
-            <Link to="/login">Login / Register</Link>
-            <Link to="/dashboard">Dashboard</Link>
-          </div>
-        </header>
-
-        {/* Left & Right Vertical Accent Tabs */}
-        <div className="vertical-tab-left" title={`Ground: ${theme.surface}`}>
-          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#9266cc" }}></div>
-          <span>{theme.category}</span>
-        </div>
-
-        <div className="vertical-tab-right">
-          <span>GROUND ARENA</span>
-        </div>
-
-        {/* Center Giant Monogram Letter (like purple 'S' in Porsche reference) */}
-        <div
-          className="center-monogram-letter"
-          style={{ color: theme.accentColor }}
-          aria-hidden="true"
-        >
-          {theme.monogram}
-        </div>
-
-        {/* Spread Split-Screen Typography (like P O R [Asset] C H E) */}
-        <div className="split-headline-wrap">
-          <div className="split-text-left" style={{ color: "#ffffff", textShadow: "0 2px 14px rgba(0,0,0,0.3)" }}>
-            {theme.splitLeft}
-          </div>
-          <div className="split-text-right">
-            {theme.splitRight}
-          </div>
-        </div>
-
-        {/* Quadrant 1: Top-Left Info Tag */}
-        <div className="quadrant-tag top-left">
-          <div className="quadrant-title">{activeSport.name}</div>
-          <div className="quadrant-line"></div>
-          <div className="quadrant-sub">{theme.surface}</div>
-        </div>
-
-        {/* Quadrant 2: Top-Right Info Tag */}
-        <div className="quadrant-tag top-right split-half-dark-text">
-          <div className="quadrant-title">{stats.count} Active Tournaments</div>
-          <div className="quadrant-line"></div>
-          <div className="quadrant-sub">National & State Leagues</div>
-        </div>
-
-        {/* Quadrant 3: Bottom-Left Info Tag */}
-        <div className="quadrant-tag bottom-left">
-          <div className="quadrant-title">{theme.format}</div>
-          <div className="quadrant-line"></div>
-          <div className="quadrant-sub">{theme.rules}</div>
-        </div>
-
-        {/* Quadrant 4: Bottom-Right Info Tag */}
-        <div className="quadrant-tag bottom-right split-half-dark-text">
-          <div className="quadrant-title">
-            ${stats.prize.toLocaleString()} USD
-          </div>
-          <div className="quadrant-line"></div>
-          <div className="quadrant-sub">{stats.teams} Registered Teams</div>
-        </div>
-
-        {/* Centerpiece 3D Floating Ball/Equipment & Explore Button */}
-        <div className="center-asset-anchor">
-          <Link
-            to={`/tournaments?sport=${activeSport.id}`}
-            className="center-3d-asset"
-            title={`View ${activeSport.name} Tournaments`}
-          >
-            <Sport3DAsset sportName={activeSport.name} size={190} />
-            <div className="asset-drop-shadow"></div>
-          </Link>
-
-          <Link
-            to={`/tournaments?sport=${activeSport.id}`}
-            className="center-explore-btn"
-          >
-            <span>Explore More</span>
-            <ArrowRight size={14} />
-          </Link>
-        </div>
-
-        {/* Bottom Bar: Prev/Next Arrow Controls and Meta Links */}
-        <footer className="showcase-bottom-bar">
-          <div className="showcase-arrow-controls">
-            <button
-              className="showcase-arrow-btn"
-              onClick={handlePrev}
-              title="Previous Sport"
-              aria-label="Previous Sport"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <button
-              className="showcase-arrow-btn"
-              onClick={handleNext}
-              title="Next Sport"
-              aria-label="Next Sport"
-            >
-              <ChevronRight size={18} />
-            </button>
-
-            <div className="showcase-footer-left">
-              <span style={{ fontWeight: 800, color: "#0f172a" }}>
-                {String(currentIndex + 1).padStart(2, "0")} /{" "}
-                {String(displaySports.length).padStart(2, "0")}
-              </span>
-              <span>•</span>
-              <span style={{ textTransform: "uppercase", letterSpacing: "1px" }}>
-                {activeSport.name} Ground View
-              </span>
+          {/* Technical Specs & Stats Chips */}
+          <div className="hero-specs-row">
+            <div className="hero-spec-chip">
+              <Shield size={14} style={{ color: "#10b981" }} />
+              <span>Surface: <strong>{activeSport.surface || cinematicMeta.surface}</strong></span>
             </div>
+            <div className="hero-spec-chip">
+              <Users size={14} style={{ color: "#38bdf8" }} />
+              <span>Format: <strong>{activeSport.format || cinematicMeta.players}</strong></span>
+            </div>
+            {stats.prize > 0 && (
+              <div className="hero-spec-chip">
+                <Trophy size={14} style={{ color: "#fbbf24" }} />
+                <span>Prize Pool: <strong>${stats.prize.toLocaleString()}</strong></span>
+              </div>
+            )}
           </div>
 
-          <div className="showcase-footer-right">
-            <span>Official Grounds</span>
-            <span>•</span>
-            <span>Supabase Verified</span>
-            <span>•</span>
+          {/* Action CTAs */}
+          <div className="hero-action-buttons">
             <Link
               to={`/tournaments?sport=${activeSport.id}`}
-              style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 700 }}
+              className="btn-hero-primary"
+              id="hero-explore-tournaments-btn"
             >
-              View Matches →
+              Explore Tournaments
+              <ArrowRight size={18} />
+            </Link>
+            <Link
+              to="/add-tournament"
+              className="btn-hero-secondary"
+              id="hero-create-tournament-btn"
+            >
+              Host Tournament
             </Link>
           </div>
-        </footer>
-      </div>
+        </div>
+      </section>
 
-      {/* Quick Sport Selector Strip */}
-      <nav className="sports-pill-nav" aria-label="Select Sport">
-        {displaySports.map((s, idx) => {
-          const sTheme = getSportTheme(s.name);
-          const isActive = idx === currentIndex;
-          return (
-            <button
-              key={s.id}
-              className={`sport-pill-btn ${isActive ? "active" : ""}`}
-              onClick={() => setCurrentIndex(idx)}
-            >
-              <span>{sTheme.icon}</span>
-              <span>{s.name}</span>
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* "All Sports" Stadium Ground Gallery */}
-      {showAllGroundsGrid && (
-        <section className="sports-gallery-section">
-          <h2 className="sports-gallery-title">All Sports & Stadium Grounds</h2>
-          <p className="sports-gallery-sub">
-            Explore tournaments, authentic tactical pitch grounds, and regulations across all disciplines
-          </p>
-
-          <div className="ground-card-grid">
-            {displaySports.map((s, idx) => {
-              const sTheme = getSportTheme(s.name);
-              const sStats = tournamentStats[s.id] || {
-                count: 15,
-                prize: 1000000,
-                teams: 190,
-                stadiums: [],
-              };
-              const sRealGround = getRealSportGround(s.name);
-
-              return (
-                <Link
-                  key={s.id}
-                  to={`/tournaments?sport=${s.id}`}
-                  className="ground-card"
-                  onClick={() => setCurrentIndex(idx)}
-                >
-                  {/* Split Ground Background with Real Stadium Photo on every card */}
-                  <div className="ground-card-split">
-                    <div className="card-split-left">
-                      <img
-                        src={sRealGround.groundImage}
-                        alt={s.name}
-                        className="card-ground-bg-img"
-                        referrerPolicy="no-referrer"
-                      />
-                      <SportGroundBackground sportName={s.name} variant="card" />
-                    </div>
-                    <div className="card-split-right">
-                      <img
-                        src={sRealGround.groundImage}
-                        alt={s.name}
-                        className="card-ground-bg-img"
-                        referrerPolicy="no-referrer"
-                      />
-                      <SportGroundBackground sportName={s.name} variant="card" />
-                    </div>
-                  </div>
-
-                  {/* Card Front Content */}
-                  <div className="ground-card-content">
-                    <div className="ground-card-header">
-                      <span className="ground-card-badge">{sTheme.surface}</span>
-                      <span
-                        style={{
-                          fontSize: "0.8rem",
-                          fontWeight: 700,
-                          color: "#ffffff",
-                          background: "rgba(0,0,0,0.5)",
-                          padding: "0.2rem 0.6rem",
-                          borderRadius: "9999px",
-                          backdropFilter: "blur(4px)",
-                        }}
-                      >
-                        {sStats.count} Events
-                      </span>
-                    </div>
-
-                    <div className="ground-card-center">
-                      <div className="ground-card-icon">
-                        <Sport3DAsset sportName={s.name} size={90} />
-                      </div>
-                      <h3 className="ground-card-name">{s.name}</h3>
-                      <span
-                        style={{
-                          fontSize: "0.75rem",
-                          color: "#cbd5e1",
-                          fontWeight: 600,
-                          letterSpacing: "0.5px",
-                        }}
-                      >
-                        {sTheme.format}
-                      </span>
-                    </div>
-
-                    <div className="ground-card-footer">
-                      <span className="ground-card-stats">
-                        ${(sStats.prize / 1000).toFixed(0)}k Prize Pool
-                      </span>
-                      <span className="ground-card-link">
-                        Enter Ground <ArrowRight size={13} />
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
+      {/* =====================================================================
+          BOTTOM CAROUSEL FORMAT (Matches Unmissable TV Series Row in Photo)
+          ===================================================================== */}
+      <section className="sports-carousel-section" aria-label="Explore Sports Carousel">
+        {/* Header with Title and Scroll Controls */}
+        <div className="carousel-header-row">
+          <div className="carousel-title-group">
+            <h2 className="carousel-section-title">Explore Sports</h2>
+            <span className="carousel-section-subtitle">
+              {displaySports.length} disciplines available
+            </span>
           </div>
-        </section>
-      )}
+
+          <div className="carousel-nav-controls">
+            <button
+              onClick={handleScrollLeft}
+              className="carousel-arrow-btn"
+              aria-label="Scroll sports carousel left"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <button
+              onClick={handleScrollRight}
+              className="carousel-arrow-btn"
+              aria-label="Scroll sports carousel right"
+            >
+              <ChevronRight size={20} />
+            </button>
+          </div>
+        </div>
+
+        {/* The Horizontal Carousel Track */}
+        <div className="carousel-scroll-track" ref={carouselRef}>
+          {displaySports.map((sport, idx) => {
+            const isActive = idx === currentIndex;
+            const sCustomImg = sport.image || sport.imageUrl || sport.bannerUrl;
+            const sMeta = getSportCinematicMeta(sport.name, sCustomImg);
+            const sStats = tournamentStats[sport.id] || { count: 0, prize: 0, teams: 0 };
+
+            return (
+              <div
+                key={sport.id}
+                className={`sport-poster-card ${isActive ? "is-active" : ""}`}
+                onClick={() => handleSelectSport(idx)}
+                tabIndex={0}
+                role="button"
+                aria-pressed={isActive}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    handleSelectSport(idx);
+                  }
+                }}
+              >
+                {/* Poster Image */}
+                <img
+                  src={sMeta.posterImage}
+                  alt={`${sport.name} Poster`}
+                  className="poster-bg-img"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src =
+                      "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?q=80&w=800&auto=format&fit=crop";
+                  }}
+                />
+
+                {/* Gradient shade for bottom text readability */}
+                <div className="poster-gradient-shade" />
+
+                {/* Top Badge (Like Sky Atlantic / BBC iPlayer in reference) */}
+                <div className="poster-top-tag-wrap">
+                  <span className="poster-network-tag">
+                    {sport.surface ? sport.surface.split(" ")[0] : sMeta.surface.split(" ")[0]}
+                  </span>
+                  {isActive && (
+                    <span
+                      style={{
+                        width: "8px",
+                        height: "8px",
+                        borderRadius: "50%",
+                        background: "#10b981",
+                        boxShadow: "0 0 8px #10b981",
+                      }}
+                    />
+                  )}
+                </div>
+
+                {/* Bottom Title & Meta (Like 'SUCCESSION', 'GAME OF THRONES') */}
+                <div className="poster-bottom-info">
+                  <h3 className="poster-sport-name">{sport.name}</h3>
+                  <div className="poster-sub-meta">
+                    <span>{sMeta.players}</span>
+                    <span className="poster-tournament-count">
+                      {sStats.count > 0 ? `${sStats.count} Events` : "Open League"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 };

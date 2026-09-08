@@ -9,7 +9,7 @@ import "../styles/sport-showcase.css";
 
 const SportCard = ({ sport }) => {
   const theme = getSportTheme(sport.name);
-  const realGround = getRealSportGround(sport.name);
+  const realGround = getRealSportGround(sport.name, sport.image || sport.imageUrl || sport.bannerUrl);
 
   return (
     <Link to={`/tournaments?sport=${sport.id}`} className="ground-card" title={`View ${sport.name} Tournaments`}>
@@ -21,6 +21,9 @@ const SportCard = ({ sport }) => {
             alt={sport.name}
             className="card-ground-bg-img"
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.target.src = "https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=1600&auto=format&fit=crop";
+            }}
           />
           <SportGroundBackground sportName={sport.name} variant="card" />
         </div>
@@ -30,6 +33,9 @@ const SportCard = ({ sport }) => {
             alt={sport.name}
             className="card-ground-bg-img"
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.target.src = "https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=1600&auto=format&fit=crop";
+            }}
           />
           <SportGroundBackground sportName={sport.name} variant="card" />
         </div>
