@@ -1238,3 +1238,152 @@
   box-shadow: 0 6px 20px rgba(16, 185, 129, 0.55);
 }
 
+/* Compact Traffic Light Status Filter Group */
+.traffic-filter-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  padding: 5px 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.traffic-icon-btn-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.traffic-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.traffic-icon-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* Yellow: All Tournaments */
+.traffic-icon-btn.yellow-filter {
+  color: #fbbf24;
+}
+.traffic-icon-btn.yellow-filter:hover {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.25);
+}
+.traffic-icon-btn.yellow-filter.active {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: #f59e0b;
+  color: #fef08a;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.45);
+}
+
+/* Green: Future Tournaments */
+.traffic-icon-btn.green-filter {
+  color: #34d399;
+}
+.traffic-icon-btn.green-filter:hover {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+}
+.traffic-icon-btn.green-filter.active {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: #10b981;
+  color: #a7f3d0;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.45);
+}
+
+/* Red: Post Tournaments */
+.traffic-icon-btn.red-filter {
+  color: #f87171;
+}
+.traffic-icon-btn.red-filter:hover {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.25);
+}
+.traffic-icon-btn.red-filter.active {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+  color: #fecaca;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.45);
+}
+
+/* Glowing mini-dot indicator inside each button */
+.traffic-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  box-shadow: 0 0 6px currentColor;
+}
+.traffic-dot.yellow {
+  background-color: #f59e0b;
+  color: #f59e0b;
+}
+.traffic-dot.green {
+  background-color: #10b981;
+  color: #10b981;
+}
+.traffic-dot.red {
+  background-color: #ef4444;
+  color: #ef4444;
+}
+
+/* Floating Hover Tooltip */
+.traffic-tooltip {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 6px 12px;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+  z-index: 100;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: #f8fafc;
+}
+
+.traffic-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px;
+  border-style: solid;
+  border-color: #0f172a transparent transparent transparent;
+}
+
+.traffic-icon-btn-wrapper:hover .traffic-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+

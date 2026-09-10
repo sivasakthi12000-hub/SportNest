@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, ArrowRight, Users, Trophy, Shield, Activity } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ChevronLeft, ChevronRight, ArrowRight, Users, Trophy, Shield, Activity, Sparkles, MapPin } from "lucide-react";
 import { getTournaments } from "../services/dataService";
 import { getSportCinematicMeta } from "../data/sportCinematicData";
 import "../styles/sport-showcase.css";
@@ -24,17 +24,23 @@ interface SportShowcaseHeroProps {
   showAllGroundsGrid?: boolean;
 }
 
+// All-sports panoramic arena backdrop image
+const ALL_SPORTS_HERO_IMAGE =
+  "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?q=80&w=1920&auto=format&fit=crop";
+
 export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
   sports,
 }) => {
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState("");
+  const [totalTournamentsCount, setTotalTournamentsCount] = useState(0);
+  const [totalPrizePool, setTotalPrizePool] = useState(0);
   const [tournamentStats, setTournamentStats] = useState<
     Record<number, { count: number; prize: number; teams: number }>
   >({});
   const carouselRef = useRef<HTMLDivElement>(null);
 
-  // Live time for the top-right live TV badge (matching the Sky TV interface clock)
+  // Live clock badge
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -51,17 +57,22 @@ export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
   useEffect(() => {
     getTournaments().then((data) => {
       if (Array.isArray(data)) {
+        setTotalTournamentsCount(data.length);
         const stats: Record<number, { count: number; prize: number; teams: number }> = {};
+        let prizeSum = 0;
         data.forEach((t) => {
           const sId = Number(t.sportId);
           if (!stats[sId]) {
             stats[sId] = { count: 0, prize: 0, teams: 0 };
           }
           stats[sId].count++;
-          stats[sId].prize += Number(t.prizeAmount) || 0;
+          const p = Number(t.prizeAmount) || 0;
+          stats[sId].prize += p;
+          prizeSum += p;
           stats[sId].teams += Number(t.registeredTeams) || 0;
         });
         setTournamentStats(stats);
+        setTotalPrizePool(prizeSum);
       }
     });
   }, []);
@@ -70,25 +81,19 @@ export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
 
   const handleScrollLeft = () => {
     if (carouselRef.current) {
-      carouselRef.current.scrollBy({ left: -240, behavior: "smooth" });
+      carouselRef.current.scrollBy({ left: -280, behavior: "smooth" });
     }
   };
 
   const handleScrollRight = () => {
     if (carouselRef.current) {
-      carouselRef.current.scrollBy({ left: 240, behavior: "smooth" });
+      carouselRef.current.scrollBy({ left: 280, behavior: "smooth" });
     }
   };
 
-  const handleSelectSport = (index: number) => {
-    setCurrentIndex(index);
-    // Scroll the selected card into view in the carousel
-    if (carouselRef.current) {
-      const card = carouselRef.current.children[index] as HTMLElement;
-      if (card) {
-        card.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-      }
-    }
+  // When user clicks the Explore Sports card, redirect to that requested tournament!
+  const handleSportCardClick = (sport: SportItem) => {
+    navigate(`/tournaments?sport=${sport.id}&sportName=${encodeURIComponent(sport.name)}`);
   };
 
   if (displaySports.length === 0) {
@@ -97,7 +102,7 @@ export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
         <div style={{ maxWidth: "560px", margin: "0 auto", background: "rgba(15, 23, 42, 0.8)", padding: "2.5rem", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.1)" }}>
           <div className="live-pulse-indicator" style={{ margin: "0 auto 1rem" }} />
           <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "0.75rem", color: "#f8fafc" }}>
-            Loading ArenaSync Sports...
+            Loading SportsNest Arena...
           </h2>
           <p style={{ color: "#94a3b8", fontSize: "0.95rem" }}>
             Connecting to live Supabase database for sports, grounds, and tournament schedules.
@@ -107,24 +112,18 @@ export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
     );
   }
 
-  const activeSport = displaySports[currentIndex] || displaySports[0];
-  const customImg = activeSport.bannerUrl || activeSport.imageUrl || activeSport.image;
-  const cinematicMeta = getSportCinematicMeta(activeSport.name, customImg);
-  const stats = tournamentStats[activeSport.id] || { count: 0, prize: 0, teams: 0 };
-  const sportDescription = activeSport.description || cinematicMeta.synopsis;
-
   return (
     <div className="cinematic-tv-container">
       {/* =====================================================================
-          TOP CINEMATIC HERO BANNER (Matches Sky TV / Streaming Header Layout)
+          TOP CINEMATIC HERO BANNER (1st show only the all sports kind image)
           ===================================================================== */}
-      <section className="cinematic-hero-banner" aria-label={`${activeSport.name} Featured Showcase`}>
-        {/* Backdrop Image Container */}
+      <section className="cinematic-hero-banner" aria-label="All Sports Multi-Arena Featured Showcase">
+        {/* Backdrop Image Container: All Sports Kind Image */}
         <div className="hero-backdrop-container">
           <img
-            key={`hero-backdrop-${activeSport.id}-${activeSport.name}`}
-            src={cinematicMeta.bannerImage}
-            alt={`${activeSport.name} Arena Backdrop`}
+            key="hero-backdrop-all-sports"
+            src={ALL_SPORTS_HERO_IMAGE}
+            alt="All Sports Multi-Arena Backdrop"
             className="hero-backdrop-img animating"
             referrerPolicy="no-referrer"
             onError={(e) => {
@@ -137,47 +136,52 @@ export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
           <div className="hero-bottom-vignette" />
         </div>
 
-        {/* Top-Right Live Clock Badge (matches 12:25pm in reference photo) */}
+        {/* Top-Right Live Clock Badge */}
         <div className="hero-live-clock-badge">
           <span className="live-pulse-indicator" />
-          <span>LIVE ARENA</span>
+          <span>LIVE SPORTS ARENA</span>
           {currentTime && <span style={{ opacity: 0.6 }}>| {currentTime}</span>}
         </div>
 
         {/* Content Area on the Left */}
         <div className="hero-content-column">
-          {/* Category Tag / Network Pill (like sky atlantic) */}
+          {/* Category Tag / Network Pill */}
           <div className="hero-top-meta-row">
             <span className="hero-network-badge">
               <span className="network-badge-dot" />
-              {cinematicMeta.badge}
+              ALL SPORTS MULTI-ARENA
             </span>
             <span className="hero-status-pill">
               <Activity size={13} style={{ color: "#10b981" }} />
-              {stats.count > 0 ? `${stats.count} Tournaments Open` : "Sanctioned Season"}
+              {totalTournamentsCount > 0
+                ? `${totalTournamentsCount} Sanctioned Tournaments Active`
+                : "Active Season Open"}
             </span>
           </div>
 
           {/* Main Display Title */}
-          <h1 className="hero-sport-title">{activeSport.name}</h1>
+          <h1 className="hero-sport-title">SportsNest Championship Arena</h1>
 
           {/* Engaging Synopsis */}
-          <p className="hero-synopsis-text">{sportDescription}</p>
+          <p className="hero-synopsis-text">
+            The definitive multi-sport championship platform. Discover local and state tournaments,
+            register your squad, track group standings & elimination brackets, or host your own sanctioned competition.
+          </p>
 
           {/* Technical Specs & Stats Chips */}
           <div className="hero-specs-row">
             <div className="hero-spec-chip">
               <Shield size={14} style={{ color: "#10b981" }} />
-              <span>Surface: <strong>{activeSport.surface || cinematicMeta.surface}</strong></span>
+              <span>Disciplines: <strong>{displaySports.length} Olympic & League Sports</strong></span>
             </div>
             <div className="hero-spec-chip">
               <Users size={14} style={{ color: "#38bdf8" }} />
-              <span>Format: <strong>{activeSport.format || cinematicMeta.players}</strong></span>
+              <span>Coverage: <strong>All India Pincodes & Stadiums</strong></span>
             </div>
-            {stats.prize > 0 && (
+            {totalPrizePool > 0 && (
               <div className="hero-spec-chip">
                 <Trophy size={14} style={{ color: "#fbbf24" }} />
-                <span>Prize Pool: <strong>${stats.prize.toLocaleString()}</strong></span>
+                <span>Prize Pool: <strong>₹{totalPrizePool.toLocaleString("en-IN")}</strong></span>
               </div>
             )}
           </div>
@@ -185,11 +189,11 @@ export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
           {/* Action CTAs */}
           <div className="hero-action-buttons">
             <Link
-              to={`/tournaments?sport=${activeSport.id}`}
+              to="/tournaments"
               className="btn-hero-primary"
               id="hero-explore-tournaments-btn"
             >
-              Explore Tournaments
+              Explore All Tournaments
               <ArrowRight size={18} />
             </Link>
             <Link
@@ -197,14 +201,14 @@ export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
               className="btn-hero-secondary"
               id="hero-create-tournament-btn"
             >
-              Host Tournament
+              Add New Tournament
             </Link>
           </div>
         </div>
       </section>
 
       {/* =====================================================================
-          BOTTOM CAROUSEL FORMAT (Matches Unmissable TV Series Row in Photo)
+          BOTTOM CAROUSEL FORMAT (Explore Sports cards redirect to that tournament)
           ===================================================================== */}
       <section className="sports-carousel-section" aria-label="Explore Sports Carousel">
         {/* Header with Title and Scroll Controls */}
@@ -212,7 +216,7 @@ export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
           <div className="carousel-title-group">
             <h2 className="carousel-section-title">Explore Sports</h2>
             <span className="carousel-section-subtitle">
-              {displaySports.length} disciplines available
+              Click any sport card to view its live tournaments
             </span>
           </div>
 
@@ -236,8 +240,7 @@ export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
 
         {/* The Horizontal Carousel Track */}
         <div className="carousel-scroll-track" ref={carouselRef}>
-          {displaySports.map((sport, idx) => {
-            const isActive = idx === currentIndex;
+          {displaySports.map((sport) => {
             const sCustomImg = sport.image || sport.imageUrl || sport.bannerUrl;
             const sMeta = getSportCinematicMeta(sport.name, sCustomImg);
             const sStats = tournamentStats[sport.id] || { count: 0, prize: 0, teams: 0 };
@@ -245,14 +248,15 @@ export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
             return (
               <div
                 key={sport.id}
-                className={`sport-poster-card ${isActive ? "is-active" : ""}`}
-                onClick={() => handleSelectSport(idx)}
+                className="sport-poster-card"
+                onClick={() => handleSportCardClick(sport)}
                 tabIndex={0}
                 role="button"
-                aria-pressed={isActive}
+                title={`Click to view ${sport.name} tournaments`}
+                aria-label={`View ${sport.name} tournaments`}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
-                    handleSelectSport(idx);
+                    handleSportCardClick(sport);
                   }
                 }}
               >
@@ -271,25 +275,28 @@ export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
                 {/* Gradient shade for bottom text readability */}
                 <div className="poster-gradient-shade" />
 
-                {/* Top Badge (Like Sky Atlantic / BBC iPlayer in reference) */}
+                {/* Top Badge */}
                 <div className="poster-top-tag-wrap">
                   <span className="poster-network-tag">
                     {sport.surface ? sport.surface.split(" ")[0] : sMeta.surface.split(" ")[0]}
                   </span>
-                  {isActive && (
-                    <span
-                      style={{
-                        width: "8px",
-                        height: "8px",
-                        borderRadius: "50%",
-                        background: "#10b981",
-                        boxShadow: "0 0 8px #10b981",
-                      }}
-                    />
-                  )}
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      fontSize: "0.7rem",
+                      color: "#10b981",
+                      background: "rgba(0, 0, 0, 0.6)",
+                      padding: "2px 6px",
+                      borderRadius: "6px",
+                    }}
+                  >
+                    View ➜
+                  </span>
                 </div>
 
-                {/* Bottom Title & Meta (Like 'SUCCESSION', 'GAME OF THRONES') */}
+                {/* Bottom Title & Meta */}
                 <div className="poster-bottom-info">
                   <h3 className="poster-sport-name">{sport.name}</h3>
                   <div className="poster-sub-meta">

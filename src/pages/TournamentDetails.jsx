@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
+import { MapPin, Navigation, ExternalLink } from "lucide-react";
 import { getTournamentById, getSports, getTeamsByTournamentId } from "../services/dataService";
 import "../styles/tournament.css";
 
@@ -121,6 +122,88 @@ const TournamentDetails = () => {
           <h3>About</h3>
           <p>{tournament.description}</p>
         </div>
+
+        {/* Venue Location & Pinned Google Map */}
+        {(tournament.mapUrl || (tournament.groundName && tournament.district)) && (
+          <div
+            className="venue-map-card"
+            style={{
+              marginTop: "1.5rem",
+              background: "rgba(15, 23, 42, 0.8)",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+              borderRadius: "12px",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "12px 16px",
+                borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                background: "rgba(255, 255, 255, 0.03)",
+                flexWrap: "wrap",
+                gap: "8px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <MapPin size={18} style={{ color: "#38bdf8" }} />
+                <h3 style={{ margin: 0, fontSize: "1.05rem", color: "#f8fafc" }}>
+                  Venue Location & Pinned Map
+                </h3>
+              </div>
+              <a
+                href={
+                  tournament.mapUrl ||
+                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                    `${tournament.groundName}, ${tournament.district}, ${tournament.state}`
+                  )}`
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  color: "#38bdf8",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  textDecoration: "none",
+                }}
+              >
+                <span>Get Driving Directions</span>
+                <ExternalLink size={14} />
+              </a>
+            </div>
+
+            <div style={{ padding: "12px 16px", fontSize: "0.9rem", color: "#cbd5e1" }}>
+              📍 <strong>{tournament.groundName}</strong>
+              {tournament.address ? `, ${tournament.address}` : ""}
+              {`, ${tournament.district}, ${tournament.state}`}
+              {tournament.pincode ? ` - ${tournament.pincode}` : ""}
+            </div>
+
+            <div style={{ width: "100%", height: "260px" }}>
+              <iframe
+                title="Tournament Venue Location Map"
+                src={
+                  tournament.mapUrl?.includes("/maps/embed")
+                    ? tournament.mapUrl
+                    : `https://maps.google.com/maps?q=${encodeURIComponent(
+                        tournament.mapUrl ||
+                          `${tournament.groundName}, ${tournament.district}, ${tournament.state}`
+                      )}&t=&z=15&ie=UTF8&iwloc=&output=embed`
+                }
+                width="100%"
+                height="100%"
+                style={{ border: 0, display: "block" }}
+                loading="lazy"
+                allowFullScreen=""
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="group-stage">

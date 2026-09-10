@@ -34,6 +34,11 @@ import {
   Filter,
   ExternalLink,
   RefreshCw,
+  Menu,
+  X,
+  Code,
+  Copy,
+  Check,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -54,12 +59,12 @@ import "../styles/admin-dashboard.css";
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-// Currency converters & formatters
+// Currency converters & formatters (Default INR, with faithful 1:1 Supabase values)
 const CURRENCIES = {
-  USD: { symbol: "$", rate: 1, label: "USD" },
-  INR: { symbol: "₹", rate: 83.5, label: "INR" },
-  EUR: { symbol: "€", rate: 0.92, label: "EUR" },
-  GBP: { symbol: "£", rate: 0.78, label: "GBP" },
+  INR: { symbol: "₹", rate: 1, label: "INR" },
+  USD: { symbol: "$", rate: 0.012, label: "USD" },
+  EUR: { symbol: "€", rate: 0.011, label: "EUR" },
+  GBP: { symbol: "£", rate: 0.0094, label: "GBP" },
 };
 
 type CurrencyKey = keyof typeof CURRENCIES;
@@ -77,12 +82,15 @@ const Dashboard: React.FC = () => {
 
   // UI States
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyKey>("USD");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showSessionModal, setShowSessionModal] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyKey>("INR");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [chartYear, setChartYear] = useState("2026");
   const [selectedMenu, setSelectedMenu] = useState("dashboard");
-  const [activeBarIndex, setActiveBarIndex] = useState<number>(7); // Default to August (index 7) as in the reference image
+  const [activeBarIndex, setActiveBarIndex] = useState<number>(7);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [teamTournamentFilter, setTeamTournamentFilter] = useState<number | null>(null);
 
@@ -118,14 +126,18 @@ const Dashboard: React.FC = () => {
     fetchSupabaseData();
   }, []);
 
-  // Format money based on selected currency
-  const formatMoney = (amountInUSD: number) => {
-    const curr = CURRENCIES[selectedCurrency];
-    const converted = amountInUSD * curr.rate;
+  // Format money based on selected currency using real Supabase figures
+  const formatMoney = (amount: number) => {
+    const num = Number(amount) || 0;
+    const curr = CURRENCIES[selectedCurrency] || CURRENCIES.INR;
+    const converted = num * curr.rate;
+    if (selectedCurrency === "INR") {
+      return `₹${Math.round(converted).toLocaleString("en-IN")}`;
+    }
     return (
       curr.symbol +
       converted.toLocaleString("en-US", {
-        maximumFractionDigits: converted > 1000 ? 0 : 2,
+        maximumFractionDigits: 0,
         minimumFractionDigits: 0,
       })
     );
@@ -134,8 +146,8 @@ const Dashboard: React.FC = () => {
   // Aggregated live calculations from Supabase
   const stats = useMemo(() => {
     const totalTourneys = tournaments.length;
-    const totalPrizeUSD = tournaments.reduce((acc, t) => acc + (t.prizeAmount || 0), 0);
-    const totalFeesUSD = tournaments.reduce(
+    const totalPrizeRaw = tournaments.reduce((acc, t) => acc + (t.prizeAmount || 0), 0);
+    const totalFeesRaw = tournaments.reduce(
       (acc, t) => acc + (t.entryFee || 0) * (t.registeredTeams || 0),
       0
     );
@@ -147,8 +159,8 @@ const Dashboard: React.FC = () => {
 
     return {
       totalTourneys,
-      totalPrizeUSD,
-      totalFeesUSD,
+      totalPrizeRaw,
+      totalFeesRaw,
       registeredTeamsSum,
       maxTeamsSum,
       capacityPercent: Math.min(100, Math.round((registeredTeamsSum / maxTeamsSum) * 100)),
@@ -250,7 +262,7 @@ const Dashboard: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `ArenaSync_Tournaments_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `SportsNest_Tournaments_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -266,15 +278,28 @@ const Dashboard: React.FC = () => {
   return (
     <div className="dash-outer-wrapper">
       <div className="dash-shell">
+        {/* Mobile Drawer Overlay */}
+        {mobileMenuOpen && (
+          <div
+            className="dash-mobile-overlay"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        )}
+
         {/* =========================================================
             LEFT SIDEBAR
             ========================================================= */}
-        <aside className={`dash-sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
+        <aside
+          className={`dash-sidebar ${sidebarCollapsed ? "collapsed" : ""} ${
+            mobileMenuOpen ? "mobile-open" : ""
+          }`}
+        >
           <div className="dash-sidebar-header">
             <button
               onClick={() => {
                 setSelectedMenu("dashboard");
                 setTeamTournamentFilter(null);
+                setMobileMenuOpen(false);
               }}
               className="dash-logo-block"
               style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 }}
@@ -283,7 +308,7 @@ const Dashboard: React.FC = () => {
               <div className="dash-logo-icon">
                 <span>⚡</span>
               </div>
-              {!sidebarCollapsed && <span className="dash-logo-title">ArenaSync</span>}
+              {!sidebarCollapsed && <span className="dash-logo-title">SportsNest</span>}
             </button>
 
             <button
@@ -296,7 +321,7 @@ const Dashboard: React.FC = () => {
             </button>
           </div>
 
-          {/* ADMIN MENU - STRICTLY: Dashboard, teams, sports, logout */}
+          {/* ADMIN MENU */}
           <div className="dash-nav-section">
             {!sidebarCollapsed && <div className="dash-nav-heading">ADMIN MENU</div>}
             <ul className="dash-nav-list">
@@ -306,6 +331,7 @@ const Dashboard: React.FC = () => {
                   onClick={() => {
                     setSelectedMenu("dashboard");
                     setTeamTournamentFilter(null);
+                    setMobileMenuOpen(false);
                   }}
                   id="admin-nav-dashboard"
                 >
@@ -318,16 +344,37 @@ const Dashboard: React.FC = () => {
 
               <li>
                 <button
+                  className={`dash-nav-item ${selectedMenu === "tournaments" ? "active" : ""}`}
+                  onClick={() => {
+                    setSelectedMenu("tournaments");
+                    setTeamTournamentFilter(null);
+                    setMobileMenuOpen(false);
+                  }}
+                  id="admin-nav-tournaments"
+                >
+                  <div className="dash-nav-left-part">
+                    <Trophy size={18} />
+                    {!sidebarCollapsed && <span>Tournaments</span>}
+                  </div>
+                  {!sidebarCollapsed && (
+                    <span className="dash-nav-badge">{tournaments.length}</span>
+                  )}
+                </button>
+              </li>
+
+              <li>
+                <button
                   className={`dash-nav-item ${selectedMenu === "teams" ? "active" : ""}`}
                   onClick={() => {
                     setSelectedMenu("teams");
                     setTeamTournamentFilter(null);
+                    setMobileMenuOpen(false);
                   }}
                   id="admin-nav-teams"
                 >
                   <div className="dash-nav-left-part">
                     <Users size={18} />
-                    {!sidebarCollapsed && <span>teams</span>}
+                    {!sidebarCollapsed && <span>Teams</span>}
                   </div>
                   {!sidebarCollapsed && (
                     <span className="dash-nav-badge">
@@ -343,16 +390,33 @@ const Dashboard: React.FC = () => {
                   onClick={() => {
                     setSelectedMenu("sports");
                     setTeamTournamentFilter(null);
+                    setMobileMenuOpen(false);
                   }}
                   id="admin-nav-sports"
                 >
                   <div className="dash-nav-left-part">
                     <Award size={18} />
-                    {!sidebarCollapsed && <span>sports</span>}
+                    {!sidebarCollapsed && <span>Sports</span>}
                   </div>
                   {!sidebarCollapsed && (
                     <span className="dash-nav-badge">{sports.length || "11"}</span>
                   )}
+                </button>
+              </li>
+
+              <li>
+                <button
+                  className={`dash-nav-item ${selectedMenu === "settings" ? "active" : ""}`}
+                  onClick={() => {
+                    setSelectedMenu("settings");
+                    setMobileMenuOpen(false);
+                  }}
+                  id="admin-nav-settings"
+                >
+                  <div className="dash-nav-left-part">
+                    <Settings size={18} />
+                    {!sidebarCollapsed && <span>Settings & Auth</span>}
+                  </div>
                 </button>
               </li>
 
@@ -363,12 +427,12 @@ const Dashboard: React.FC = () => {
                     logout();
                     navigate("/login");
                   }}
-                  title="Logout and remove token from JSON"
+                  title="Logout and remove session token"
                   id="admin-nav-logout"
                 >
                   <div className="dash-nav-left-part" style={{ color: "#ef4444" }}>
                     <LogOut size={18} />
-                    {!sidebarCollapsed && <span style={{ color: "#ef4444", fontWeight: 600 }}>logout</span>}
+                    {!sidebarCollapsed && <span style={{ color: "#ef4444", fontWeight: 600 }}>Logout</span>}
                   </div>
                 </button>
               </li>
@@ -382,6 +446,16 @@ const Dashboard: React.FC = () => {
         <main className="dash-main">
           {/* Top Header Row */}
           <div className="dash-top-header">
+            {/* Mobile Hamburger Drawer Trigger */}
+            <button
+              className="dash-mobile-menu-btn"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle navigation menu"
+              title="Open Navigation"
+            >
+              {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+
             <div className="dash-search-container">
               <Search size={18} className="dash-search-icon" />
               <input
@@ -395,6 +469,29 @@ const Dashboard: React.FC = () => {
             </div>
 
             <div className="dash-header-actions">
+              {/* Role & Auth JSON Flag Pill */}
+              <button
+                onClick={() => setShowSessionModal(true)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  background: user?.role === "superadmin" ? "rgba(245, 158, 11, 0.12)" : "rgba(16, 185, 129, 0.12)",
+                  border: `1px solid ${user?.role === "superadmin" ? "rgba(245, 158, 11, 0.35)" : "rgba(16, 185, 129, 0.35)"}`,
+                  color: user?.role === "superadmin" ? "#d97706" : "#059669",
+                  padding: "0.45rem 0.8rem",
+                  borderRadius: "8px",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+                title="View active authentication session and role JSON"
+                id="view-auth-json-btn"
+              >
+                <Code size={14} />
+                <span>{user?.role === "superadmin" ? "👑 superadmin" : "🛡️ admin"}</span>
+              </button>
+
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="admin-btn-primary"
@@ -442,29 +539,26 @@ const Dashboard: React.FC = () => {
 
               <button
                 className="dash-icon-btn"
-                onClick={() => setSelectedMenu("help")}
-                title="Help & Operations Guide"
+                onClick={() => setSelectedMenu("settings")}
+                title="Admin Settings & JSON Payload"
               >
-                <HelpCircle size={18} />
-              </button>
-
-              <button className="dash-icon-btn" title="Messages">
-                <Mail size={18} />
-                <span className="dash-icon-badge" />
-              </button>
-
-              <button className="dash-icon-btn" title="Notifications">
-                <Bell size={18} />
-                <span className="dash-icon-badge" />
+                <Settings size={18} />
               </button>
 
               <div
                 className="dash-user-profile"
                 id="right-corner-admin-profile"
-                style={{ cursor: "default" }}
+                style={{ cursor: "pointer" }}
+                onClick={() => setShowSessionModal(true)}
+                title="View Organizer Admin Session"
               >
-                <div className="dash-avatar">
-                  <span>A</span>
+                <div
+                  className="dash-avatar"
+                  style={{
+                    background: user?.role === "superadmin" ? "#f59e0b" : "#059669",
+                  }}
+                >
+                  <span>{user?.username?.charAt(0).toUpperCase() || "A"}</span>
                 </div>
                 <div className="dash-user-meta">
                   <span className="dash-user-name">{user?.username || "admin"}</span>
@@ -492,7 +586,7 @@ const Dashboard: React.FC = () => {
                   cursor: "pointer",
                   transition: "all 0.15s ease",
                 }}
-                title="Logout and remove token from backend JSON"
+                title="Logout and end admin session"
               >
                 <LogOut size={16} />
                 <span>Logout</span>
@@ -569,31 +663,51 @@ const Dashboard: React.FC = () => {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: "1.5rem" }}>
                 <div className="admin-data-card">
                   <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#0f172a", marginBottom: "1rem" }}>
-                    Active Admin Account
+                    Active Organizer Session
                   </h3>
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                     <div>
                       <label style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>Username</label>
-                      <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.95rem" }}>{user?.username || "admin123"}</div>
+                      <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.95rem" }}>{user?.username || "admin"}</div>
                     </div>
                     <div>
-                      <label style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>Email Address</label>
-                      <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.95rem" }}>{user?.email || "sivasakthi12000@gmail.com"}</div>
+                      <label style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>Display Name</label>
+                      <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.95rem" }}>{user?.name || user?.username || "Admin"}</div>
                     </div>
                     <div>
-                      <label style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>System Role</label>
+                      <label style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>System Role Flag</label>
                       <div>
-                        <span style={{ display: "inline-block", background: "#fef3c7", color: "#b45309", padding: "0.2rem 0.6rem", borderRadius: "6px", fontSize: "0.8rem", fontWeight: 800 }}>
-                          SUPER ADMIN
+                        <span
+                          style={{
+                            display: "inline-block",
+                            background: user?.role === "superadmin" ? "#fef3c7" : "#d1fae5",
+                            color: user?.role === "superadmin" ? "#b45309" : "#065f46",
+                            padding: "0.25rem 0.75rem",
+                            borderRadius: "6px",
+                            fontSize: "0.82rem",
+                            fontWeight: 800,
+                          }}
+                        >
+                          {user?.role === "superadmin" ? "👑 SUPERADMIN" : "🛡️ ADMIN"}
                         </span>
                       </div>
+                    </div>
+                    <div style={{ marginTop: "0.5rem" }}>
+                      <button
+                        onClick={() => setShowSessionModal(true)}
+                        className="admin-btn-primary"
+                        style={{ fontSize: "0.82rem", padding: "0.45rem 0.85rem" }}
+                      >
+                        <Code size={14} />
+                        <span>Inspect Session JSON Flag</span>
+                      </button>
                     </div>
                   </div>
                 </div>
 
                 <div className="admin-data-card">
                   <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#0f172a", marginBottom: "1rem" }}>
-                    Supabase Database Connection
+                    Supabase Database Telemetry
                   </h3>
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -607,7 +721,7 @@ const Dashboard: React.FC = () => {
                     <div>
                       <label style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>Current Records</label>
                       <div style={{ fontWeight: 600, color: "#0f172a" }}>
-                        {tournaments.length} Tournaments | {sports.length} Sports | {totalTeamsExact} Registered Teams
+                        {tournaments.length} Tournaments | {sports.length} Sports | {totalTeamsExact || stats.registeredTeamsSum} Teams
                       </div>
                     </div>
                     <button
@@ -673,10 +787,10 @@ const Dashboard: React.FC = () => {
               <div className="dash-welcome-row">
                 <div>
                   <h1 className="dash-welcome-title">
-                    Welcome back {user?.name || "Sajibur Rahman" /* Or admin123 */}
+                    Welcome back {user?.name || user?.username || "Admin"}
                   </h1>
                   <p className="dash-welcome-sub">
-                    Monitor and control what happens with your tournaments and prize pools from Supabase.
+                    Live tournament, team, and prize pool telemetry powered directly by Supabase.
                   </p>
                 </div>
 
@@ -708,17 +822,17 @@ const Dashboard: React.FC = () => {
                     <span className="dash-metric-label">Total Prize Pool</span>
                   </div>
 
-                  {/* Currency selector matching the UI */}
+                  {/* Currency selector with INR as primary */}
                   <select
                     className="dash-currency-badge"
                     value={selectedCurrency}
                     onChange={(e) => setSelectedCurrency(e.target.value as CurrencyKey)}
                     title="Change Currency"
                   >
-                    <option value="USD">🇺🇸 USD</option>
-                    <option value="INR">🇮🇳 INR</option>
-                    <option value="EUR">🇪🇺 EUR</option>
-                    <option value="GBP">🇬🇧 GBP</option>
+                    <option value="INR">🇮🇳 INR (₹)</option>
+                    <option value="USD">🇺🇸 USD ($)</option>
+                    <option value="EUR">🇪🇺 EUR (€)</option>
+                    <option value="GBP">🇬🇧 GBP (£)</option>
                   </select>
                 </div>
 
@@ -726,16 +840,16 @@ const Dashboard: React.FC = () => {
                   {loading ? (
                     <div className="dash-skeleton-pulse" style={{ height: "40px", width: "200px" }} />
                   ) : (
-                    formatMoney(stats.totalPrizeUSD)
+                    formatMoney(stats.totalPrizeRaw)
                   )}
                 </div>
 
                 <div className="dash-trend-pill positive">
-                  <span>+14.8% ↑ from last season</span>
+                  <span>● Live Supabase synced database</span>
                 </div>
               </div>
 
-              {/* Two Action buttons matching the image: Send Money & Request Money style */}
+              {/* Two Action buttons */}
               <div className="dash-card-actions-row">
                 <button
                   onClick={() => setShowCreateModal(true)}
@@ -779,12 +893,12 @@ const Dashboard: React.FC = () => {
                   {loading ? (
                     <div className="dash-skeleton-pulse" style={{ height: "40px", width: "160px" }} />
                   ) : (
-                    formatMoney(stats.totalFeesUSD)
+                    formatMoney(stats.totalFeesRaw)
                   )}
                 </div>
 
-                <div className="dash-trend-pill negative">
-                  <span>-2.1% ↓ from last month</span>
+                <div className="dash-trend-pill positive">
+                  <span>● Collected from {stats.registeredTeamsSum} teams</span>
                 </div>
               </div>
             </div>
@@ -813,7 +927,7 @@ const Dashboard: React.FC = () => {
                 </div>
 
                 <div className="dash-trend-pill positive">
-                  <span>+4.5% ↑ from last month</span>
+                  <span>● Across {stats.totalTourneys} tournaments</span>
                 </div>
               </div>
             </div>
@@ -1166,6 +1280,146 @@ const Dashboard: React.FC = () => {
         fetchSupabaseData();
       }}
     />
+  )}
+
+  {/* Active Session & Role JSON Inspection Modal */}
+  {showSessionModal && (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15, 23, 42, 0.75)",
+        backdropFilter: "blur(4px)",
+        zIndex: 9999,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "1rem",
+      }}
+      onClick={() => setShowSessionModal(false)}
+    >
+      <div
+        style={{
+          background: "#ffffff",
+          borderRadius: "16px",
+          maxWidth: "580px",
+          width: "100%",
+          padding: "1.75rem",
+          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.35)",
+          border: "1px solid #e2e8f0",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <Code size={20} color="#059669" />
+            <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800, color: "#0f172a" }}>
+              Authentication & Role Session JSON
+            </h3>
+          </div>
+          <button
+            onClick={() => setShowSessionModal(false)}
+            style={{
+              background: "#f1f5f9",
+              border: "none",
+              borderRadius: "8px",
+              padding: "0.4rem",
+              cursor: "pointer",
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <p style={{ margin: "0 0 1rem 0", fontSize: "0.85rem", color: "#64748b" }}>
+          Live authenticated JSON payload stored in the session. Tournament creators are assigned the <strong>admin</strong> role, while root platform administrators possess the <strong>superadmin</strong> flag.
+        </p>
+
+        <div
+          style={{
+            background: "#0f172a",
+            color: "#38bdf8",
+            padding: "1rem",
+            borderRadius: "10px",
+            fontFamily: "monospace",
+            fontSize: "0.82rem",
+            overflowX: "auto",
+            maxHeight: "320px",
+          }}
+        >
+          <pre style={{ margin: 0 }}>
+            {JSON.stringify(
+              {
+                status: "authenticated",
+                user: {
+                  id: user?.id || "usr_" + (user?.username || "admin"),
+                  username: user?.username || "admin",
+                  name: user?.name || user?.username || "Tournament Admin",
+                  email: user?.email || `${user?.username || "admin"}@sportsnest.app`,
+                  role: user?.role || "admin",
+                  isSuperAdmin: user?.role === "superadmin",
+                  systemScope: user?.role === "superadmin" ? "PLATFORM_ROOT" : "TOURNAMENT_ORGANIZER",
+                  permissions:
+                    user?.role === "superadmin"
+                      ? ["*"]
+                      : [
+                          "tournaments:create",
+                          "tournaments:update",
+                          "teams:register",
+                          "brackets:generate",
+                          "scores:record",
+                        ],
+                },
+                session: {
+                  tokenType: "Bearer",
+                  token: localStorage.getItem("sportsnest_auth_token") || "jwt_demo_token_sportsnest_admin",
+                  storedKey: "sportsnest_auth_user",
+                  databaseBackend: "Supabase PostgreSQL",
+                },
+              },
+              null,
+              2
+            )}
+          </pre>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "1.25rem" }}>
+          <button
+            onClick={() => {
+              const jsonStr = JSON.stringify(
+                {
+                  status: "authenticated",
+                  user: {
+                    username: user?.username || "admin",
+                    name: user?.name || "Tournament Admin",
+                    role: user?.role || "admin",
+                    isSuperAdmin: user?.role === "superadmin",
+                  },
+                  token: localStorage.getItem("sportsnest_auth_token"),
+                },
+                null,
+                2
+              );
+              navigator.clipboard.writeText(jsonStr);
+              setCopiedJson(true);
+              setTimeout(() => setCopiedJson(false), 2000);
+            }}
+            className="admin-btn-secondary"
+            style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
+          >
+            {copiedJson ? <Check size={14} color="#059669" /> : <Copy size={14} />}
+            <span>{copiedJson ? "Copied JSON!" : "Copy JSON"}</span>
+          </button>
+
+          <button
+            onClick={() => setShowSessionModal(false)}
+            className="admin-btn-primary"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   )}
 </div>
   );

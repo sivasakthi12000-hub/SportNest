@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { User, Lock, Eye, EyeOff, LogIn, AlertCircle, ShieldCheck } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { SportsNestLogo } from "../components/SportsNestLogo";
 import "../styles/auth.css";
 
 const Login: React.FC = () => {
@@ -52,12 +53,10 @@ const Login: React.FC = () => {
   return (
     <div className="auth-page-container">
       <div className="auth-card" id="login-card">
-        <div className="auth-header">
-          <div className="auth-icon-circle">
-            <User size={28} />
-          </div>
-          <h1 className="auth-title">Admin Login</h1>
-          <p className="auth-subtitle">Sign in to access your ArenaSync Dashboard</p>
+        <div className="auth-header" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+          <SportsNestLogo size="lg" theme="dark" />
+          <h1 className="auth-title" style={{ marginTop: "0.5rem" }}>Admin Portal</h1>
+          <p className="auth-subtitle">Sign in to access your SportsNest Dashboard</p>
         </div>
 
         {error && (

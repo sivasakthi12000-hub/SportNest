@@ -21,6 +21,36 @@ interface UserSession {
 // Backend in-memory session registry (mapping token -> user session JSON)
 const activeSessionsJSON: Record<string, UserSession> = {};
 
+// Registered admin accounts store (username -> { password, name, email, role })
+const registeredAdminsStore: Record<string, { password: string; name: string; email: string; role: string }> = {
+  admin123: {
+    password: "admin123",
+    name: "Sivasakthi (Owner)",
+    email: "sivasakthi12000@gmail.com",
+    role: "superadmin",
+  },
+};
+
+interface TrackedOrganizer {
+  username: string;
+  name: string;
+  email: string;
+  role: string;
+  createdAt: string;
+  tournamentCount?: number;
+}
+
+const trackedOrganizersStore: TrackedOrganizer[] = [
+  {
+    username: "admin123",
+    name: "Sivasakthi (Owner)",
+    email: "sivasakthi12000@gmail.com",
+    role: "superadmin",
+    createdAt: new Date().toISOString(),
+    tournamentCount: 50,
+  },
+];
+
 function generateBackendToken(username: string): string {
   const randomBytes = crypto.randomBytes(24).toString("hex");
   const timestamp = Date.now();
@@ -53,40 +83,34 @@ async function startServer() {
   });
 
   // 1. Backend Login API:
-  // Receives username & password, validates, generates token on backend,
-  // references the session in backend sessions JSON, and returns JSON with token.
   app.post("/api/auth/login", (req, res) => {
     const { username, password } = req.body || {};
     const trimmedUser = String(username || "").trim();
     const trimmedPass = String(password || "").trim();
 
-    if (
-      (trimmedUser === "admin123" || trimmedUser.toLowerCase() === "admin123") &&
-      trimmedPass === "admin123"
-    ) {
-      const token = generateBackendToken("admin123");
+    // Check against registered accounts store
+    const account = registeredAdminsStore[trimmedUser] || registeredAdminsStore[trimmedUser.toLowerCase()];
+
+    if (account && account.password === trimmedPass) {
+      const token = generateBackendToken(trimmedUser);
       const now = new Date();
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       const session: UserSession = {
-        username: "admin123",
-        name: "Admin User",
-        role: "Administrator",
-        email: "sivasakthi12000@gmail.com",
+        username: trimmedUser,
+        name: account.name || trimmedUser,
+        role: account.role || "admin",
+        email: account.email || `${trimmedUser}@sportsnest.app`,
         token,
         tokenType: "Bearer",
         loggedInAt: now.toISOString(),
         expiresAt: expiresAt.toISOString(),
       };
 
-      // Store in backend active sessions JSON
       activeSessionsJSON[token] = session;
 
       console.log(
-        `[Backend Auth] Login: user "${session.username}" generated token: ${token.substring(
-          0,
-          20
-        )}... Total active sessions: ${Object.keys(activeSessionsJSON).length}`
+        `[Backend Auth] Login: user "${session.username}" (role: ${session.role}) generated token: ${token.substring(0, 20)}...`
       );
 
       return res.json({
@@ -94,13 +118,102 @@ async function startServer() {
         token,
         tokenType: "Bearer",
         user: session,
-        message: "Token generated in backend and stored in session JSON",
+        message: "Authenticated successfully. Admin session JSON generated.",
       });
     }
 
     return res.status(401).json({
       success: false,
-      error: "Invalid credentials. Use userName: admin123 and password: admin123",
+      error: "Invalid credentials. If you are superadmin use admin123 / admin123, or use your tournament organizer credentials.",
+    });
+  });
+
+  // 1b. Backend Register Admin API (called upon tournament creation with password):
+  app.post("/api/auth/register-admin", (req, res) => {
+    const { username, password, email, name } = req.body || {};
+    const trimmedUser = String(username || "").trim();
+    const trimmedPass = String(password || "").trim();
+
+    if (!trimmedUser || !trimmedPass) {
+      return res.status(400).json({
+        success: false,
+        error: "Username and password are required to create an organizer admin account.",
+      });
+    }
+
+    // Role flag: "superadmin" only for sivasakthi / admin123, otherwise "admin"
+    const isSuperAdmin = trimmedUser.toLowerCase() === "admin123" || email === "sivasakthi12000@gmail.com";
+    const role = isSuperAdmin ? "superadmin" : "admin";
+    const userEmail = email || `${trimmedUser}@sportsnest.app`;
+    const displayName = name || trimmedUser;
+
+    // Register or update account in store
+    registeredAdminsStore[trimmedUser] = {
+      password: trimmedPass,
+      name: displayName,
+      email: userEmail,
+      role,
+    };
+
+    // Track newly registered organizer
+    const existingTrackedIdx = trackedOrganizersStore.findIndex(
+      (o) => o.username.toLowerCase() === trimmedUser.toLowerCase()
+    );
+    if (existingTrackedIdx >= 0) {
+      trackedOrganizersStore[existingTrackedIdx] = {
+        ...trackedOrganizersStore[existingTrackedIdx],
+        name: displayName,
+        email: userEmail,
+        role,
+      };
+    } else {
+      trackedOrganizersStore.push({
+        username: trimmedUser,
+        name: displayName,
+        email: userEmail,
+        role,
+        createdAt: new Date().toISOString(),
+        tournamentCount: 1,
+      });
+    }
+
+    // Immediately generate token & active session
+    const token = generateBackendToken(trimmedUser);
+    const now = new Date();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    const session: UserSession = {
+      username: trimmedUser,
+      name: displayName,
+      role,
+      email: userEmail,
+      token,
+      tokenType: "Bearer",
+      loggedInAt: now.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+    };
+
+    activeSessionsJSON[token] = session;
+
+    console.log(
+      `[Backend Auth] Registered and tracked Organizer: "${trimmedUser}" with role: "${role}". Total admins tracked: ${trackedOrganizersStore.length}`
+    );
+
+    return res.json({
+      success: true,
+      token,
+      tokenType: "Bearer",
+      user: session,
+      message: `Organizer admin account created with role: ${role}`,
+    });
+  });
+
+  // Tracked organizers telemetry endpoint
+  app.get("/api/admin/organizers", (_req, res) => {
+    res.json({
+      success: true,
+      totalTracked: trackedOrganizersStore.length,
+      organizers: trackedOrganizersStore,
     });
   });
 

@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { User, LogOut, LayoutDashboard, Trophy, Plus, ChevronDown } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getSports, getTournaments } from "../services/dataService";
+import { SportsNestLogo } from "./SportsNestLogo";
 import "../styles/navbar.css";
 
 const Navbar = () => {
@@ -49,14 +50,8 @@ const Navbar = () => {
     <nav className="navbar" id="app-primary-navbar">
       {/* Brand Logo with Energetic Field Badge */}
       <div className="navbar-logo">
-        <Link to="/" className="logo-link">
-          <span className="logo-icon-wrap">
-            <span className="logo-icon">⚽</span>
-          </span>
-          <div className="logo-text-group">
-            <span className="logo-text">ArenaSync</span>
-            <span className="logo-subtext">SPORTS ARENA</span>
-          </div>
+        <Link to="/" className="logo-link" style={{ textDecoration: "none" }}>
+          <SportsNestLogo size="md" theme="light" />
         </Link>
       </div>
 

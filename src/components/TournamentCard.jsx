@@ -120,6 +120,88 @@ const TournamentCard = ({ tournament, sportName }) => {
           </div>
         )}
 
+        {/* Detailed Street Address & Pincode Badge */}
+        {(t.address || t.pincode) && (
+          <div
+            className="card-address-badge-row"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              fontSize: "0.78rem",
+              color: "#cbd5e1",
+              marginBottom: "8px",
+            }}
+          >
+            {t.address && (
+              <span
+                style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  maxWidth: "200px",
+                }}
+                title={t.address}
+              >
+                📍 {t.address}
+              </span>
+            )}
+            {t.pincode && (
+              <span
+                style={{
+                  background: "rgba(16, 185, 129, 0.2)",
+                  color: "#10b981",
+                  border: "1px solid rgba(16, 185, 129, 0.4)",
+                  padding: "1px 6px",
+                  borderRadius: "4px",
+                  fontWeight: 700,
+                  fontSize: "0.72rem",
+                  letterSpacing: "0.03em",
+                  flexShrink: 0,
+                }}
+              >
+                📮 PIN: {t.pincode}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Prize Breakdown Highlights */}
+        {t.prizeBreakdown && t.prizeBreakdown.length > 0 && (
+          <div
+            className="card-prizes-preview"
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: "4px",
+              marginBottom: "8px",
+            }}
+          >
+            {t.prizeBreakdown.slice(0, 2).map((p, pIdx) => (
+              <span
+                key={pIdx}
+                style={{
+                  background: "rgba(251, 191, 36, 0.15)",
+                  color: "#fbbf24",
+                  border: "1px solid rgba(251, 191, 36, 0.3)",
+                  padding: "2px 6px",
+                  borderRadius: "4px",
+                  fontSize: "0.7rem",
+                  fontWeight: 600,
+                }}
+              >
+                {p.position}: ₹{Number(p.amount).toLocaleString("en-IN")}
+              </span>
+            ))}
+            {t.prizeBreakdown.length > 2 && (
+              <span style={{ fontSize: "0.68rem", color: "#94a3b8" }}>
+                +{t.prizeBreakdown.length - 2} more prizes
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Tournament Stats Ribbon */}
         <div className="card-stats-grid">
           <div className="stat-pill">

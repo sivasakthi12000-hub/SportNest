@@ -1,5 +1,5 @@
 {
-  "name": "ArenaSync",
+  "name": "sportsnest",
   "description": "Multi-sport tournament discovery, team registration, group stage points tables, and elimination brackets platform.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

@@ -1594,7 +1594,28 @@
 /* =======================================================
    RESPONSIVE MEDIA QUERIES (TABLETS & PHONES)
    ======================================================= */
+/* Mobile Drawer Overlay and Responsiveness */
+.dash-mobile-menu-btn {
+  display: none;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.5rem;
+  color: #0f172a;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+
+.dash-mobile-overlay {
+  display: none;
+}
+
 @media (max-width: 1024px) {
+  .dash-mobile-menu-btn {
+    display: flex;
+  }
+
   .dash-shell {
     flex-direction: column;
     min-height: auto;
@@ -1602,11 +1623,29 @@
   }
 
   .dash-sidebar {
-    display: none; /* Hidden on desktop view, accessible via mobile drawer */
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
   }
 
-  .dash-mobile-menu-btn {
-    display: flex;
+  .dash-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  .dash-mobile-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 999;
   }
 
   .dash-top-metrics-grid {

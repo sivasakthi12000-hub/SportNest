@@ -75,7 +75,10 @@ export const AdminTournamentsView: React.FC<AdminTournamentsViewProps> = ({
     return (
       t.name.toLowerCase().includes(q) ||
       t.location.toLowerCase().includes(q) ||
-      t.groundName.toLowerCase().includes(q) ||
+      (t.groundName && t.groundName.toLowerCase().includes(q)) ||
+      (t.address && t.address.toLowerCase().includes(q)) ||
+      (t.pincode && t.pincode.toLowerCase().includes(q)) ||
+      (t.createdBy && t.createdBy.toLowerCase().includes(q)) ||
       sportName.toLowerCase().includes(q)
     );
   });
@@ -194,10 +197,30 @@ export const AdminTournamentsView: React.FC<AdminTournamentsViewProps> = ({
                     <tr key={t.id}>
                       <td>
                         <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
-                          <span style={{ fontWeight: 700, color: "#0f172a" }}>{t.name}</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
+                            <span style={{ fontWeight: 700, color: "#0f172a" }}>{t.name}</span>
+                            {t.createdBy && (
+                              <span
+                                style={{
+                                  fontSize: "0.68rem",
+                                  background: "#ecfdf5",
+                                  border: "1px solid #a7f3d0",
+                                  padding: "1px 6px",
+                                  borderRadius: "4px",
+                                  color: "#065f46",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                by {t.createdBy}
+                              </span>
+                            )}
+                          </div>
                           <span style={{ fontSize: "0.8rem", color: "#64748b", display: "flex", alignItems: "center", gap: "0.3rem" }}>
                             <MapPin size={12} color="#059669" />
-                            {t.groundName ? `${t.groundName}, ` : ""}{t.location}
+                            {t.groundName ? `${t.groundName}, ` : ""}
+                            {t.address ? `${t.address}, ` : ""}
+                            {t.location}
+                            {t.pincode ? ` (${t.pincode})` : ""}
                           </span>
                         </div>
                       </td>
@@ -220,6 +243,18 @@ export const AdminTournamentsView: React.FC<AdminTournamentsViewProps> = ({
                           <span style={{ fontWeight: 700, color: "#059669" }}>
                             {formatMoney(t.prizeAmount)}
                           </span>
+                          {t.prizeBreakdown && t.prizeBreakdown.length > 0 && (
+                            <span
+                              style={{
+                                fontSize: "0.72rem",
+                                color: "#0284c7",
+                                display: "block",
+                                fontWeight: 500,
+                              }}
+                            >
+                              {t.prizeBreakdown.length} prize tiers ({t.prizeBreakdown[0]?.label}: ₹{t.prizeBreakdown[0]?.amount})
+                            </span>
+                          )}
                           <span style={{ fontSize: "0.75rem", color: "#64748b", display: "block" }}>
                             Fee: {formatMoney(t.entryFee)}
                           </span>
