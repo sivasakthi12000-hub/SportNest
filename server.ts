@@ -1,5 +1,9 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import path from "path";
+import fs from "fs";
 import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 
@@ -25,13 +29,27 @@ function generateBackendToken(username: string): string {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json());
 
   // Health check API
   app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
+    res.json({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      supabaseConfigured: Boolean(
+        process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
+      ),
+    });
+  });
+
+  // Runtime environment config API for frontend clients
+  app.get("/api/config", (_req, res) => {
+    res.json({
+      supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "",
+      supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "",
+    });
   });
 
   // 1. Backend Login API:
@@ -143,7 +161,7 @@ async function startServer() {
     });
   });
 
-  // Vite middleware for development
+  // Vite middleware for development vs static serve for production
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -152,9 +170,24 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+    // Serve static assets, excluding index.html which we customize with runtime env injection
+    app.use(express.static(distPath, { index: false }));
+
     app.get("*", (_req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+      const indexPath = path.join(distPath, "index.html");
+      if (fs.existsSync(indexPath)) {
+        let html = fs.readFileSync(indexPath, "utf8");
+        const runtimeEnv = {
+          VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "",
+          VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "",
+        };
+        const scriptInjection = `<script>window.__ENV__ = ${JSON.stringify(runtimeEnv)};</script>`;
+        html = html.replace("<head>", `<head>${scriptInjection}`);
+        res.setHeader("Content-Type", "text/html");
+        res.send(html);
+      } else {
+        res.status(404).send("Build output not found. Please run npm run build.");
+      }
     });
   }
 
