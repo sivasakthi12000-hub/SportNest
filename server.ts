@@ -51,6 +51,22 @@ const trackedOrganizersStore: TrackedOrganizer[] = [
   },
 ];
 
+function cleanSupabaseUrl(rawUrl: string): string {
+  if (!rawUrl) return "";
+  let url = rawUrl.trim();
+  url = url.replace(/^["']|["']$/g, "");
+  url = url.replace(/\/rest\/v1\/?$/i, "");
+  url = url.replace(/\/+$/, "");
+  return url;
+}
+
+function cleanSupabaseKey(rawKey: string): string {
+  if (!rawKey) return "";
+  let key = rawKey.trim();
+  key = key.replace(/^["']|["']$/g, "");
+  return key;
+}
+
 function generateBackendToken(username: string): string {
   const randomBytes = crypto.randomBytes(24).toString("hex");
   const timestamp = Date.now();
@@ -65,20 +81,22 @@ async function startServer() {
 
   // Health check API
   app.get("/api/health", (_req, res) => {
+    const rawUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
+    const cleanUrl = cleanSupabaseUrl(rawUrl);
     res.json({
       status: "ok",
       timestamp: new Date().toISOString(),
-      supabaseConfigured: Boolean(
-        process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
-      ),
+      supabaseConfigured: Boolean(cleanUrl),
     });
   });
 
   // Runtime environment config API for frontend clients
   app.get("/api/config", (_req, res) => {
+    const rawUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
+    const rawKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "";
     res.json({
-      supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "",
-      supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "",
+      supabaseUrl: cleanSupabaseUrl(rawUrl),
+      supabaseAnonKey: cleanSupabaseKey(rawKey),
     });
   });
 
@@ -215,6 +233,87 @@ async function startServer() {
       totalTracked: trackedOrganizersStore.length,
       organizers: trackedOrganizersStore,
     });
+  });
+
+  // Admin User & Role Management endpoints (Super Admin only)
+  app.get("/api/admin/users", (_req, res) => {
+    const list = Object.entries(registeredAdminsStore).map(([uname, data]) => {
+      const tracked = trackedOrganizersStore.find((t) => t.username.toLowerCase() === uname.toLowerCase());
+      return {
+        username: uname,
+        name: data.name,
+        email: data.email,
+        role: data.role,
+        status: (data as any).status || "active",
+        createdAt: tracked?.createdAt || new Date().toISOString(),
+        tournamentCount: tracked?.tournamentCount || 0,
+      };
+    });
+    res.json({ success: true, users: list });
+  });
+
+  app.post("/api/admin/users", (req, res) => {
+    const { username, password, name, email, role } = req.body || {};
+    const trimmedUser = String(username || "").trim();
+    if (!trimmedUser || !password) {
+      return res.status(400).json({ success: false, error: "Username and password required" });
+    }
+    if (registeredAdminsStore[trimmedUser]) {
+      return res.status(400).json({ success: false, error: "User already exists" });
+    }
+    const cleanRole = String(role || "admin").toLowerCase() === "superadmin" ? "superadmin" : "admin";
+    registeredAdminsStore[trimmedUser] = {
+      password: String(password).trim(),
+      name: String(name || trimmedUser).trim(),
+      email: String(email || `${trimmedUser}@sportsnest.org`).trim(),
+      role: cleanRole,
+      ...( { status: "active" } as any),
+    };
+    trackedOrganizersStore.push({
+      username: trimmedUser,
+      name: String(name || trimmedUser).trim(),
+      email: String(email || `${trimmedUser}@sportsnest.org`).trim(),
+      role: cleanRole,
+      createdAt: new Date().toISOString(),
+      tournamentCount: 0,
+    });
+    res.json({ success: true, message: `Account created for ${trimmedUser}` });
+  });
+
+  app.put("/api/admin/users/:username", (req, res) => {
+    const username = req.params.username;
+    const { name, email, role, status, password } = req.body || {};
+    const user = registeredAdminsStore[username];
+    if (!user) {
+      return res.status(404).json({ success: false, error: "User not found" });
+    }
+    if (name) user.name = name;
+    if (email) user.email = email;
+    if (role) user.role = role.toLowerCase() === "superadmin" ? "superadmin" : "admin";
+    if (status) (user as any).status = status;
+    if (password) user.password = String(password).trim();
+
+    // Update tracked
+    const tracked = trackedOrganizersStore.find((t) => t.username.toLowerCase() === username.toLowerCase());
+    if (tracked) {
+      if (name) tracked.name = name;
+      if (email) tracked.email = email;
+      if (role) tracked.role = user.role;
+    }
+    res.json({ success: true, message: `Updated user ${username}`, user });
+  });
+
+  app.delete("/api/admin/users/:username", (req, res) => {
+    const username = req.params.username;
+    if (username === "admin123") {
+      return res.status(400).json({ success: false, error: "Cannot deactivate root superadmin account" });
+    }
+    const user = registeredAdminsStore[username];
+    if (user) {
+      (user as any).status = (user as any).status === "inactive" ? "active" : "inactive";
+      return res.json({ success: true, message: `User status updated to ${(user as any).status}` });
+    }
+    res.status(404).json({ success: false, error: "User not found" });
   });
 
   // 2. Backend Logout API:

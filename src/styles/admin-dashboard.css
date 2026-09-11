@@ -450,15 +450,21 @@
 }
 
 /* =======================================================
-   TOP METRIC CARDS ROW (Balance, Expenses, Savings)
+   TOP METRIC CARDS ROW (Balance, Expenses, Savings, Live Matches)
    ======================================================= */
 .dash-top-metrics-grid {
   display: grid;
-  grid-template-columns: 1.35fr 1fr 1fr;
+  grid-template-columns: 1.35fr 1fr 1fr 1fr;
   gap: 1.25rem;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1200px) {
+  .dash-top-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
   .dash-top-metrics-grid {
     grid-template-columns: 1fr;
   }
@@ -993,6 +999,17 @@
 .dash-status-pill.upcoming {
   background: #e0f2fe;
   color: #0369a1;
+}
+
+.dash-status-pill.pending {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.dash-status-pill.disputed {
+  background: #ffedd5;
+  color: #c2410c;
+  border: 1px solid #fdba74;
 }
 
 /* Loading skeleton */

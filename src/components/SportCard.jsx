@@ -3,8 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { SportGroundBackground } from "./SportGroundBackground";
 import { Sport3DAsset } from "./Sport3DAsset";
-import { getSportTheme } from "../data/sportsThemeData";
-import { getRealSportGround } from "../data/sportGroundImages";
+import { getSportTheme, getRealSportGround } from "../utils/visualTheme";
 import "../styles/sport-showcase.css";
 
 const SportCard = ({ sport }) => {

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, ArrowRight, Users, Trophy, Shield, Activity, Sparkles, MapPin } from "lucide-react";
 import { getTournaments } from "../services/dataService";
-import { getSportCinematicMeta } from "../data/sportCinematicData";
+import { getSportCinematicMeta } from "../utils/visualTheme";
 import "../styles/sport-showcase.css";
 
 export interface SportItem {

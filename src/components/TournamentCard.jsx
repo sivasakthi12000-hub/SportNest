@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { MapPin, Trophy, Users, Calendar, ArrowRight, Shield, DollarSign } from "lucide-react";
-import { getTournamentVisual } from "../data/sportGroundImages";
+import { getTournamentVisual } from "../utils/visualTheme";
 import "../styles/tournament.css";
 
 const sportIcons = {

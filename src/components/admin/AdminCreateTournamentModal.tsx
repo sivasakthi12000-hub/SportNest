@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { Plus, Trash2, Trophy, MapPin } from "lucide-react";
+import { Plus, Trash2, Trophy, MapPin, Navigation } from "lucide-react";
 import { Sport, createTournament } from "../../services/dataService";
 import { useAuth } from "../../context/AuthContext";
+import { GoogleMapPreview } from "../GoogleMapPreview";
 
 interface AdminCreateTournamentModalProps {
   sports: Sport[];
@@ -21,6 +22,7 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
   const [address, setAddress] = useState("");
   const [pincode, setPincode] = useState("");
   const [groundName, setGroundName] = useState("");
+  const [mapUrl, setMapUrl] = useState("");
   const [state, setState] = useState("Telangana");
   const [district, setDistrict] = useState("Hyderabad");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -89,6 +91,7 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
         address: address.trim(),
         pincode: pincode.trim(),
         groundName: groundName.trim() || `${location} Stadium`,
+        mapUrl: mapUrl.trim() || undefined,
         state: state.trim(),
         district: district.trim(),
         date,
@@ -251,6 +254,60 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
                     onChange={(e) => setLocation(e.target.value)}
                   />
                 </div>
+              </div>
+
+              {/* Google Maps Location URL & Live Pin Preview */}
+              <div style={{ marginTop: "0.75rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.35rem" }}>
+                  <label style={{ fontSize: "0.82rem", fontWeight: 700, color: "#334155", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                    <Navigation size={13} color="#0284c7" />
+                    <span>Google Maps Venue Location URL</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const q = [groundName, address, location, pincode].filter(Boolean).join(", ");
+                      if (q) setMapUrl(`https://maps.google.com/?q=${encodeURIComponent(q)}`);
+                    }}
+                    style={{
+                      background: "#f0f9ff",
+                      border: "1px solid #bae6fd",
+                      color: "#0284c7",
+                      borderRadius: "4px",
+                      padding: "0.15rem 0.5rem",
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Auto-generate from Address
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Paste Google Maps URL (e.g. https://maps.google.com/?q=...)"
+                  value={mapUrl}
+                  onChange={(e) => setMapUrl(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "0.55rem 0.75rem",
+                    borderRadius: "6px",
+                    border: "1px solid #cbd5e1",
+                    fontSize: "0.85rem",
+                  }}
+                />
+
+                {(mapUrl || address || groundName) && (
+                  <GoogleMapPreview
+                    mapUrl={mapUrl}
+                    address={address}
+                    pincode={pincode}
+                    groundName={groundName}
+                    location={location}
+                    state={state}
+                    height="180px"
+                  />
+                )}
               </div>
             </div>
 

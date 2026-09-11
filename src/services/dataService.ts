@@ -5,7 +5,6 @@ import {
   isSupabaseReady,
   supabaseUrl,
 } from "../lib/supabase";
-import { TN_FALLBACK_TOURNAMENTS } from "../data/tnTournaments";
 
 export interface Sport {
   id: number;
@@ -315,8 +314,8 @@ export const DEFAULT_FALLBACK_SPORTS: Sport[] = [
   },
 ];
 
-// Curated 50 tournaments in Tamil Nadu (5 per sport across 10 sports, with status coverage: upcoming, ongoing, full, completed)
-export const DEFAULT_FALLBACK_TOURNAMENTS: Tournament[] = TN_FALLBACK_TOURNAMENTS;
+// All tournaments fetched directly from Supabase
+export const DEFAULT_FALLBACK_TOURNAMENTS: Tournament[] = [];
 
 let lastDataServiceError: string | null = null;
 export function getLastDataServiceError(): string | null {
@@ -339,11 +338,12 @@ export async function getSports(): Promise<Sport[]> {
       }
 
       if (error) {
-        console.error("Supabase sports query error:", error);
-        lastDataServiceError = `Sports query error: ${error.message}`;
+        // Log gently as warn so console isn't flooded with red errors
+        console.warn("Supabase sports query notice:", error.message);
+        lastDataServiceError = `Sports query notice: ${error.message}`;
       }
     } catch (err: any) {
-      console.error("Error fetching sports from Supabase:", err);
+      console.warn("Notice fetching sports from Supabase:", err?.message || err);
       lastDataServiceError = err?.message || "Failed to fetch sports";
     }
   }
@@ -419,19 +419,17 @@ export async function getTournaments(): Promise<Tournament[]> {
       }
 
       if (error) {
-        console.error("Supabase tournaments query error:", error);
-        lastDataServiceError = `Tournaments query error: ${error.message}`;
+        console.warn("Supabase tournaments query notice:", error.message);
+        lastDataServiceError = `Tournaments query notice: ${error.message}`;
       }
     } catch (err: any) {
-      console.error("Error fetching tournaments from Supabase:", err);
+      console.warn("Notice fetching tournaments from Supabase:", err?.message || err);
       lastDataServiceError = err?.message || "Failed to fetch tournaments";
     }
   }
 
-  // If not configured or failed, show default demo tournaments merged with any created ones
-  const existingIds = new Set(DEFAULT_FALLBACK_TOURNAMENTS.map((t) => t.id));
-  const uniqueLocal = localList.filter((t) => !existingIds.has(t.id));
-  return [...uniqueLocal, ...DEFAULT_FALLBACK_TOURNAMENTS];
+  // Return only user created or empty array if failed
+  return localList;
 }
 
 // Fetch tournament by ID directly from Supabase
@@ -453,11 +451,11 @@ export async function getTournamentById(id: number): Promise<Tournament | null> 
         return normalizeTournament(data);
       }
       if (error) {
-        console.error("Supabase tournament by id error:", error);
+        console.warn("Supabase tournament by id notice:", error.message);
         lastDataServiceError = error.message;
       }
     } catch (err: any) {
-      console.error("Error fetching tournament from Supabase:", err);
+      console.warn("Notice fetching tournament from Supabase:", err?.message || err);
       lastDataServiceError = err?.message;
     }
   }
@@ -482,11 +480,11 @@ export async function getTeamsByTournamentId(tournamentId: number): Promise<Team
         return data.map(normalizeTeam);
       }
       if (error) {
-        console.error("Supabase teams query error:", error);
+        console.warn("Supabase teams query notice:", error.message);
         lastDataServiceError = error.message;
       }
     } catch (err: any) {
-      console.error("Error fetching teams from Supabase:", err);
+      console.warn("Notice fetching teams from Supabase:", err?.message || err);
       lastDataServiceError = err?.message;
     }
   }
@@ -521,10 +519,10 @@ export async function getTeamById(id: number): Promise<Team | null> {
         return normalizeTeam(data);
       }
       if (error) {
-        console.error("Supabase team by id error:", error);
+        console.warn("Supabase team by id notice:", error.message);
       }
-    } catch (err) {
-      console.error("Error fetching team from Supabase:", err);
+    } catch (err: any) {
+      console.warn("Notice fetching team from Supabase:", err?.message || err);
     }
   }
 
@@ -634,7 +632,7 @@ export async function getTotalTeamsCount(): Promise<number> {
         return count;
       }
     } catch (err) {
-      console.error("Error fetching total teams count:", err);
+      console.warn("Notice fetching total teams count:", err);
     }
   }
   return 0;
@@ -726,7 +724,7 @@ export async function getAllTeams(): Promise<(Team & { tournamentName?: string; 
         }));
       }
     } catch (err) {
-      console.error("Error fetching all teams from Supabase:", err);
+      console.warn("Notice fetching all teams from Supabase:", err);
     }
   }
   return [];

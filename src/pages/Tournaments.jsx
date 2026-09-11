@@ -14,7 +14,7 @@ import {
   Layers,
 } from "lucide-react";
 import { getTournaments, getSports } from "../services/dataService";
-import { getRealSportGround } from "../data/sportGroundImages";
+import { getRealSportGround } from "../utils/visualTheme";
 import TournamentCard from "../components/TournamentCard";
 import "../styles/tournament.css";
 

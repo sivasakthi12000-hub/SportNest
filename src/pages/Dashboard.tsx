@@ -39,6 +39,14 @@ import {
   Code,
   Copy,
   Check,
+  Activity,
+  Shield,
+  ShieldAlert,
+  Lock,
+  UserCheck,
+  AlertTriangle,
+  Radio,
+  FileText,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -55,6 +63,17 @@ import { AdminBracketsView } from "../components/admin/AdminBracketsView";
 import { AdminRegistrationsView } from "../components/admin/AdminRegistrationsView";
 import { AdminLeaderboardView } from "../components/admin/AdminLeaderboardView";
 import { AdminCreateTournamentModal } from "../components/admin/AdminCreateTournamentModal";
+import { AdminApprovalsView } from "../components/admin/AdminApprovalsView";
+import { AdminLiveMatchesView } from "../components/admin/AdminLiveMatchesView";
+import { AdminUsersView } from "../components/admin/AdminUsersView";
+import { AdminProfileView } from "../components/admin/AdminProfileView";
+import { AdminAuditLogView } from "../components/admin/AdminAuditLogView";
+import { getPendingApprovalsCount } from "../services/approvalsService";
+import { generateTodayMatches, LiveMatch } from "../services/matchesService";
+import { TournamentCountdownWidget } from "../components/admin/TournamentCountdownWidget";
+import { TournamentOverviewChart } from "../components/admin/TournamentOverviewChart";
+import { BroadcastMatchCard } from "../components/admin/BroadcastMatchCard";
+import { TournamentPosterStudio } from "../components/admin/TournamentPosterStudio";
 import "../styles/admin-dashboard.css";
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -83,8 +102,6 @@ const Dashboard: React.FC = () => {
   // UI States
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showSessionModal, setShowSessionModal] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyKey>("INR");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -93,6 +110,12 @@ const Dashboard: React.FC = () => {
   const [activeBarIndex, setActiveBarIndex] = useState<number>(7);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [teamTournamentFilter, setTeamTournamentFilter] = useState<number | null>(null);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(4);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [hasUnreadNotifs, setHasUnreadNotifs] = useState(true);
+  const [roleNotice, setRoleNotice] = useState<string | null>(null);
+
+  const isSuperAdmin = user?.role === "superadmin";
 
   // Protect Dashboard: only accessible when authenticated
   useEffect(() => {
@@ -106,16 +129,18 @@ const Dashboard: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const [tourneysList, sportsList, exactTeams] = await Promise.all([
+      const [tourneysList, sportsList, exactTeams, pendingCount] = await Promise.all([
         getTournaments(),
         getSports(),
         getTotalTeamsCount(),
+        getPendingApprovalsCount(),
       ]);
       setTournaments(tourneysList);
       setSports(sportsList);
       setTotalTeamsExact(exactTeams);
+      setPendingApprovalsCount(pendingCount);
     } catch (err: any) {
-      console.error("Failed to fetch live data from Supabase:", err);
+      console.warn("Notice fetching live data from Supabase:", err);
       setError(err?.message || "Failed to load database records.");
     } finally {
       setLoading(false);
@@ -125,6 +150,11 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     fetchSupabaseData();
   }, []);
+
+  // Today's matches generated from tournament schedules
+  const todayMatches: LiveMatch[] = useMemo(() => {
+    return generateTodayMatches(tournaments);
+  }, [tournaments]);
 
   // Format money based on selected currency using real Supabase figures
   const formatMoney = (amount: number) => {
@@ -157,6 +187,10 @@ const Dashboard: React.FC = () => {
     // Unique venues
     const uniqueVenues = new Set(tournaments.map((t) => t.groundName).filter(Boolean));
 
+    // Prize pool allocation: (Total Entry Fees Collected / Total Prize Pool) * 100
+    const prizePoolAllocationPercent =
+      totalPrizeRaw > 0 ? Math.min(100, Math.round((totalFeesRaw / totalPrizeRaw) * 100)) : 0;
+
     return {
       totalTourneys,
       totalPrizeRaw,
@@ -164,6 +198,7 @@ const Dashboard: React.FC = () => {
       registeredTeamsSum,
       maxTeamsSum,
       capacityPercent: Math.min(100, Math.round((registeredTeamsSum / maxTeamsSum) * 100)),
+      prizePoolAllocationPercent,
       uniqueVenuesCount: uniqueVenues.size,
     };
   }, [tournaments]);
@@ -229,24 +264,54 @@ const Dashboard: React.FC = () => {
     });
   }, [sports, tournaments]);
 
-  // Filtered recent tournaments
+  // Role-restricted tournaments: Super Admin sees all; Admin sees assigned tournaments only
+  const visibleTournaments = useMemo(() => {
+    if (isSuperAdmin) return tournaments;
+    const username = (user?.username || "").toLowerCase();
+    const email = (user?.email || "").toLowerCase();
+    const assigned = tournaments.filter((t) => {
+      const creator = (t.createdBy || "").toLowerCase();
+      return (
+        creator === username ||
+        creator === email ||
+        (username && creator.includes(username)) ||
+        (email && creator.includes(email))
+      );
+    });
+    return assigned.length > 0 ? assigned : tournaments.slice(0, 4);
+  }, [isSuperAdmin, tournaments, user]);
+
+  // Filtered recent tournaments supporting all statuses: upcoming, live, pending_approval, disputed, completed
   const filteredTournaments = useMemo(() => {
-    return tournaments
+    return visibleTournaments
       .filter((t) => {
-        if (statusFilter !== "all" && t.status !== statusFilter) return false;
+        if (statusFilter !== "all") {
+          const s = (t.status || "").toLowerCase();
+          if (statusFilter === "completed" || statusFilter === "success") {
+            if (s !== "completed" && s !== "post" && s !== "success") return false;
+          } else if (statusFilter === "pending_approval" || statusFilter === "pending") {
+            if (s !== "pending_approval" && s !== "pending") return false;
+          } else if (statusFilter === "disputed") {
+            if (s !== "disputed") return false;
+          } else if (s !== statusFilter) {
+            return false;
+          }
+        }
         if (searchQuery.trim() !== "") {
           const q = searchQuery.toLowerCase();
           const sportName = sports.find((s) => s.id === t.sportId)?.name || "";
           return (
             t.name.toLowerCase().includes(q) ||
             t.location.toLowerCase().includes(q) ||
+            (t.groundName && t.groundName.toLowerCase().includes(q)) ||
+            (t.pincode && t.pincode.toLowerCase().includes(q)) ||
             sportName.toLowerCase().includes(q)
           );
         }
         return true;
       })
-      .slice(0, 6);
-  }, [tournaments, sports, statusFilter, searchQuery]);
+      .slice(0, 8);
+  }, [visibleTournaments, sports, statusFilter, searchQuery]);
 
   // Export Supabase data as CSV
   const handleExportCSV = () => {
@@ -351,13 +416,16 @@ const Dashboard: React.FC = () => {
                     setMobileMenuOpen(false);
                   }}
                   id="admin-nav-tournaments"
+                  title={isSuperAdmin ? "Manage all tournaments" : "View and manage assigned tournaments"}
                 >
                   <div className="dash-nav-left-part">
                     <Trophy size={18} />
-                    {!sidebarCollapsed && <span>Tournaments</span>}
+                    {!sidebarCollapsed && <span>{isSuperAdmin ? "Tournaments" : "Tournaments (Assigned)"}</span>}
                   </div>
                   {!sidebarCollapsed && (
-                    <span className="dash-nav-badge">{tournaments.length}</span>
+                    <span className="dash-nav-badge">
+                      {isSuperAdmin ? tournaments.length : visibleTournaments.length}
+                    </span>
                   )}
                 </button>
               </li>
@@ -384,6 +452,41 @@ const Dashboard: React.FC = () => {
                 </button>
               </li>
 
+              {/* NEW: Approvals Navigation Item (between Teams and Sports) with Red Count Badge */}
+              <li>
+                <button
+                  className={`dash-nav-item ${selectedMenu === "approvals" ? "active" : ""}`}
+                  onClick={() => {
+                    setSelectedMenu("approvals");
+                    setTeamTournamentFilter(null);
+                    setMobileMenuOpen(false);
+                  }}
+                  id="admin-nav-approvals"
+                  title="Review pending team registrations"
+                >
+                  <div className="dash-nav-left-part">
+                    <UserCheck size={18} style={{ color: selectedMenu === "approvals" ? "#10b981" : "#f59e0b" }} />
+                    {!sidebarCollapsed && <span>Approvals</span>}
+                  </div>
+                  {!sidebarCollapsed && pendingApprovalsCount > 0 && (
+                    <span
+                      style={{
+                        background: "#ef4444",
+                        color: "#ffffff",
+                        fontSize: "0.72rem",
+                        fontWeight: 800,
+                        padding: "0.15rem 0.5rem",
+                        borderRadius: "9999px",
+                        lineHeight: 1,
+                        animation: "pulse 2s infinite",
+                      }}
+                    >
+                      {pendingApprovalsCount}
+                    </span>
+                  )}
+                </button>
+              </li>
+
               <li>
                 <button
                   className={`dash-nav-item ${selectedMenu === "sports" ? "active" : ""}`}
@@ -404,19 +507,164 @@ const Dashboard: React.FC = () => {
                 </button>
               </li>
 
+              {/* Live/Today's Matches Item */}
+              <li>
+                <button
+                  className={`dash-nav-item ${selectedMenu === "matches" ? "active" : ""}`}
+                  onClick={() => {
+                    setSelectedMenu("matches");
+                    setTeamTournamentFilter(null);
+                    setMobileMenuOpen(false);
+                  }}
+                  id="admin-nav-matches"
+                  title="View live and scheduled matches for today"
+                >
+                  <div className="dash-nav-left-part">
+                    <Radio size={18} style={{ color: "#ef4444" }} />
+                    {!sidebarCollapsed && <span>Live Matches</span>}
+                  </div>
+                  {!sidebarCollapsed && (
+                    <span
+                      style={{
+                        background: "#fee2e2",
+                        color: "#b91c1c",
+                        fontSize: "0.68rem",
+                        fontWeight: 800,
+                        padding: "0.15rem 0.45rem",
+                        borderRadius: "4px",
+                      }}
+                    >
+                      {todayMatches.filter((m) => m.status === "live").length} LIVE
+                    </span>
+                  )}
+                </button>
+              </li>
+
+              {/* My Profile (Accessible to both Admin & Super Admin) */}
+              <li>
+                <button
+                  className={`dash-nav-item ${selectedMenu === "profile" ? "active" : ""}`}
+                  onClick={() => {
+                    setSelectedMenu("profile");
+                    setMobileMenuOpen(false);
+                  }}
+                  id="admin-nav-profile"
+                >
+                  <div className="dash-nav-left-part">
+                    <Shield size={18} />
+                    {!sidebarCollapsed && <span>My Profile</span>}
+                  </div>
+                </button>
+              </li>
+            </ul>
+          </div>
+
+          {/* SUPER ADMIN RESTRICTED SECTION */}
+          <div className="dash-nav-section" style={{ marginTop: "0.5rem" }}>
+            {!sidebarCollapsed && (
+              <div
+                className="dash-nav-heading"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  color: isSuperAdmin ? "#64748b" : "#94a3b8",
+                }}
+              >
+                <span>SUPER ADMIN</span>
+                {!isSuperAdmin && (
+                  <span style={{ fontSize: "0.65rem", background: "#f1f5f9", padding: "0.1rem 0.35rem", borderRadius: "3px" }}>
+                    LOCKED
+                  </span>
+                )}
+              </div>
+            )}
+
+            <ul className="dash-nav-list">
+              {/* User & Role Management */}
+              <li>
+                <button
+                  className={`dash-nav-item ${selectedMenu === "users" ? "active" : ""}`}
+                  onClick={() => {
+                    if (isSuperAdmin) {
+                      setSelectedMenu("users");
+                      setMobileMenuOpen(false);
+                      setRoleNotice(null);
+                    } else {
+                      setRoleNotice("User Management is restricted to Super Admin accounts.");
+                      setTimeout(() => setRoleNotice(null), 4000);
+                    }
+                  }}
+                  id="admin-nav-users"
+                  style={{
+                    opacity: isSuperAdmin ? 1 : 0.45,
+                    cursor: isSuperAdmin ? "pointer" : "not-allowed",
+                  }}
+                  title={isSuperAdmin ? "Manage admin users & permissions" : "Super Admin Only"}
+                >
+                  <div className="dash-nav-left-part">
+                    <Users size={18} />
+                    {!sidebarCollapsed && <span>User Management</span>}
+                  </div>
+                  {!sidebarCollapsed && !isSuperAdmin && <Lock size={13} color="#94a3b8" />}
+                </button>
+              </li>
+
+              {/* Audit Logs */}
+              <li>
+                <button
+                  className={`dash-nav-item ${selectedMenu === "audit" ? "active" : ""}`}
+                  onClick={() => {
+                    if (isSuperAdmin) {
+                      setSelectedMenu("audit");
+                      setMobileMenuOpen(false);
+                      setRoleNotice(null);
+                    } else {
+                      setRoleNotice("Audit Logs are restricted to Super Admin accounts.");
+                      setTimeout(() => setRoleNotice(null), 4000);
+                    }
+                  }}
+                  id="admin-nav-audit"
+                  style={{
+                    opacity: isSuperAdmin ? 1 : 0.45,
+                    cursor: isSuperAdmin ? "pointer" : "not-allowed",
+                  }}
+                  title={isSuperAdmin ? "View system security & activity logs" : "Super Admin Only"}
+                >
+                  <div className="dash-nav-left-part">
+                    <FileText size={18} />
+                    {!sidebarCollapsed && <span>Audit Logs</span>}
+                  </div>
+                  {!sidebarCollapsed && !isSuperAdmin && <Lock size={13} color="#94a3b8" />}
+                </button>
+              </li>
+
+              {/* System Settings & Telemetry */}
               <li>
                 <button
                   className={`dash-nav-item ${selectedMenu === "settings" ? "active" : ""}`}
                   onClick={() => {
-                    setSelectedMenu("settings");
-                    setMobileMenuOpen(false);
+                    if (isSuperAdmin) {
+                      setSelectedMenu("settings");
+                      setMobileMenuOpen(false);
+                      setRoleNotice(null);
+                    } else {
+                      setRoleNotice("Full system settings are restricted to Super Admin accounts.");
+                      setTimeout(() => setRoleNotice(null), 4000);
+                    }
                   }}
                   id="admin-nav-settings"
+                  style={{
+                    opacity: isSuperAdmin ? 1 : 0.45,
+                    cursor: isSuperAdmin ? "pointer" : "not-allowed",
+                  }}
+                  title={isSuperAdmin ? "Database and system settings" : "Super Admin Only"}
                 >
                   <div className="dash-nav-left-part">
                     <Settings size={18} />
-                    {!sidebarCollapsed && <span>Settings & Auth</span>}
+                    {!sidebarCollapsed && <span>System Settings</span>}
                   </div>
+                  {!sidebarCollapsed && !isSuperAdmin && <Lock size={13} color="#94a3b8" />}
                 </button>
               </li>
 
@@ -469,9 +717,8 @@ const Dashboard: React.FC = () => {
             </div>
 
             <div className="dash-header-actions">
-              {/* Role & Auth JSON Flag Pill */}
-              <button
-                onClick={() => setShowSessionModal(true)}
+              {/* Role Indicator Badge */}
+              <div
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -483,14 +730,11 @@ const Dashboard: React.FC = () => {
                   borderRadius: "8px",
                   fontSize: "0.8rem",
                   fontWeight: 700,
-                  cursor: "pointer",
                 }}
-                title="View active authentication session and role JSON"
-                id="view-auth-json-btn"
+                id="header-user-role-badge"
               >
-                <Code size={14} />
-                <span>{user?.role === "superadmin" ? "👑 superadmin" : "🛡️ admin"}</span>
-              </button>
+                <span>{user?.role === "superadmin" ? "👑 Super Admin" : "🛡️ Admin"}</span>
+              </div>
 
               <button
                 onClick={() => setShowCreateModal(true)}
@@ -537,20 +781,164 @@ const Dashboard: React.FC = () => {
                 <RefreshCw size={18} />
               </button>
 
-              <button
-                className="dash-icon-btn"
-                onClick={() => setSelectedMenu("settings")}
-                title="Admin Settings & JSON Payload"
-              >
-                <Settings size={18} />
-              </button>
+              {/* Notification Bell with unread dot and recent events dropdown */}
+              <div style={{ position: "relative" }}>
+                <button
+                  className="dash-icon-btn"
+                  onClick={() => {
+                    setShowNotifications(!showNotifications);
+                    setHasUnreadNotifs(false);
+                  }}
+                  title="Notifications & System Alerts"
+                  id="dash-notifications-bell"
+                  style={{ position: "relative" }}
+                >
+                  <Bell size={18} />
+                  {hasUnreadNotifs && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: "4px",
+                        right: "4px",
+                        width: "8px",
+                        height: "8px",
+                        borderRadius: "50%",
+                        background: "#ef4444",
+                        boxShadow: "0 0 0 2px #ffffff",
+                      }}
+                    />
+                  )}
+                </button>
 
+                {showNotifications && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      right: 0,
+                      top: "calc(100% + 8px)",
+                      width: "320px",
+                      background: "#ffffff",
+                      borderRadius: "10px",
+                      boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+                      border: "1px solid #e2e8f0",
+                      padding: "0.85rem",
+                      zIndex: 100,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "0.75rem",
+                        borderBottom: "1px solid #f1f5f9",
+                        paddingBottom: "0.5rem",
+                      }}
+                    >
+                      <span style={{ fontWeight: 800, fontSize: "0.88rem", color: "#0f172a" }}>
+                        Recent Alerts & Events
+                      </span>
+                      <button
+                        onClick={() => setShowNotifications(false)}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", padding: 0 }}
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      {/* 1. New Registration */}
+                      <div
+                        onClick={() => {
+                          setSelectedMenu("teams");
+                          setShowNotifications(false);
+                        }}
+                        style={{
+                          padding: "0.5rem",
+                          borderRadius: "6px",
+                          background: "#eff6ff",
+                          cursor: "pointer",
+                          display: "flex",
+                          gap: "0.5rem",
+                        }}
+                        id="notif-item-new-reg"
+                      >
+                        <Users size={16} color="#2563eb" style={{ flexShrink: 0, marginTop: "2px" }} />
+                        <div>
+                          <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#1e40af" }}>
+                            New Registration
+                          </div>
+                          <div style={{ fontSize: "0.74rem", color: "#1d4ed8" }}>
+                            Adyar United FC registered for Chennai Super Cup
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 2. Approval Needed */}
+                      <div
+                        onClick={() => {
+                          setSelectedMenu("approvals");
+                          setShowNotifications(false);
+                        }}
+                        style={{
+                          padding: "0.5rem",
+                          borderRadius: "6px",
+                          background: "#fef3c7",
+                          cursor: "pointer",
+                          display: "flex",
+                          gap: "0.5rem",
+                        }}
+                        id="notif-item-approval"
+                      >
+                        <UserCheck size={16} color="#d97706" style={{ flexShrink: 0, marginTop: "2px" }} />
+                        <div>
+                          <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#92400e" }}>
+                            Approval Needed
+                          </div>
+                          <div style={{ fontSize: "0.74rem", color: "#b45309" }}>
+                            {pendingApprovalsCount} team registrations awaiting sanction
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 3. Match Dispute */}
+                      <div
+                        onClick={() => {
+                          setSelectedMenu("matches");
+                          setShowNotifications(false);
+                        }}
+                        style={{
+                          padding: "0.5rem",
+                          borderRadius: "6px",
+                          background: "#fff7ed",
+                          cursor: "pointer",
+                          display: "flex",
+                          gap: "0.5rem",
+                        }}
+                        id="notif-item-dispute"
+                      >
+                        <AlertTriangle size={16} color="#ea580c" style={{ flexShrink: 0, marginTop: "2px" }} />
+                        <div>
+                          <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#9a3412" }}>
+                            Match Dispute
+                          </div>
+                          <div style={{ fontSize: "0.74rem", color: "#c2410c" }}>
+                            Player eligibility protest filed in Cricket Semi-Final #4
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* User Avatar with Role Indicator Badge */}
               <div
                 className="dash-user-profile"
                 id="right-corner-admin-profile"
-                style={{ cursor: "pointer" }}
-                onClick={() => setShowSessionModal(true)}
-                title="View Organizer Admin Session"
+                style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.6rem" }}
+                onClick={() => setSelectedMenu("profile")}
+                title="View Admin Profile & Permissions"
               >
                 <div
                   className="dash-avatar"
@@ -560,8 +948,26 @@ const Dashboard: React.FC = () => {
                 >
                   <span>{user?.username?.charAt(0).toUpperCase() || "A"}</span>
                 </div>
-                <div className="dash-user-meta">
-                  <span className="dash-user-name">{user?.username || "admin"}</span>
+                <div className="dash-user-meta" style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                  <span className="dash-user-name">{user?.name || user?.username || "admin"}</span>
+                  {/* Role indicator badge next to user avatar */}
+                  <span
+                    id="user-role-indicator-badge"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "3px",
+                      fontSize: "0.72rem",
+                      fontWeight: 800,
+                      padding: "0.1rem 0.5rem",
+                      borderRadius: "9999px",
+                      background: isSuperAdmin ? "rgba(245, 158, 11, 0.15)" : "rgba(16, 185, 129, 0.15)",
+                      color: isSuperAdmin ? "#b45309" : "#065f46",
+                      border: `1px solid ${isSuperAdmin ? "rgba(245, 158, 11, 0.4)" : "rgba(16, 185, 129, 0.4)"}`,
+                    }}
+                  >
+                    {isSuperAdmin ? "Super Admin" : "Admin"}
+                  </span>
                 </div>
               </div>
 
@@ -594,13 +1000,41 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* Role Restriction Notice Banner */}
+          {roleNotice && (
+            <div
+              style={{
+                padding: "0.75rem 1.25rem",
+                background: "#fef3c7",
+                borderBottom: "1px solid #fde68a",
+                color: "#92400e",
+                fontSize: "0.85rem",
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <Lock size={15} />
+                <span>{roleNotice}</span>
+              </div>
+              <button
+                onClick={() => setRoleNotice(null)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#92400e" }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
           {/* =========================================================
               DEDICATED SUB-VIEW SWITCHER
               Keeps admin inside the dedicated dashboard context!
               ========================================================= */}
           {selectedMenu === "tournaments" && (
             <AdminTournamentsView
-              tournaments={tournaments}
+              tournaments={visibleTournaments}
               sports={sports}
               formatMoney={formatMoney}
               onRefresh={fetchSupabaseData}
@@ -618,6 +1052,65 @@ const Dashboard: React.FC = () => {
               initialTournamentFilter={teamTournamentFilter}
               onRefreshParentCounts={fetchSupabaseData}
             />
+          )}
+
+          {/* Approvals View (Review pending team registrations) */}
+          {selectedMenu === "approvals" && (
+            <AdminApprovalsView
+              onApprovalChanged={() => {
+                fetchSupabaseData();
+              }}
+            />
+          )}
+
+          {/* Live & Today's Matches View */}
+          {selectedMenu === "matches" && (
+            <AdminLiveMatchesView matches={todayMatches} />
+          )}
+
+          {/* Admin Profile View (Accessible to both Admin and Super Admin) */}
+          {selectedMenu === "profile" && (
+            <AdminProfileView />
+          )}
+
+          {/* User & Role Management View (Super Admin Only) */}
+          {selectedMenu === "users" && (
+            isSuperAdmin ? (
+              <AdminUsersView />
+            ) : (
+              <div className="admin-view-container">
+                <div className="admin-data-card" style={{ textAlign: "center", padding: "3rem" }}>
+                  <Lock size={44} color="#d97706" style={{ margin: "0 auto 1rem auto" }} />
+                  <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0f172a" }}>Access Restricted</h2>
+                  <p style={{ color: "#64748b", margin: "0.5rem 0 1rem 0" }}>
+                    User & Role Management is restricted to Super Admin accounts only.
+                  </p>
+                  <button onClick={() => setSelectedMenu("profile")} className="admin-btn-primary" style={{ margin: "0 auto" }}>
+                    Go to My Profile
+                  </button>
+                </div>
+              </div>
+            )
+          )}
+
+          {/* Audit Logs View (Super Admin Only) */}
+          {selectedMenu === "audit" && (
+            isSuperAdmin ? (
+              <AdminAuditLogView />
+            ) : (
+              <div className="admin-view-container">
+                <div className="admin-data-card" style={{ textAlign: "center", padding: "3rem" }}>
+                  <Lock size={44} color="#d97706" style={{ margin: "0 auto 1rem auto" }} />
+                  <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0f172a" }}>Access Restricted</h2>
+                  <p style={{ color: "#64748b", margin: "0.5rem 0 1rem 0" }}>
+                    Audit Logs are restricted to Super Admin accounts only.
+                  </p>
+                  <button onClick={() => setSelectedMenu("dashboard")} className="admin-btn-primary" style={{ margin: "0 auto" }}>
+                    Return to Dashboard
+                  </button>
+                </div>
+              </div>
+            )
           )}
 
           {selectedMenu === "sports" && (
@@ -691,16 +1184,6 @@ const Dashboard: React.FC = () => {
                           {user?.role === "superadmin" ? "👑 SUPERADMIN" : "🛡️ ADMIN"}
                         </span>
                       </div>
-                    </div>
-                    <div style={{ marginTop: "0.5rem" }}>
-                      <button
-                        onClick={() => setShowSessionModal(true)}
-                        className="admin-btn-primary"
-                        style={{ fontSize: "0.82rem", padding: "0.45rem 0.85rem" }}
-                      >
-                        <Code size={14} />
-                        <span>Inspect Session JSON Flag</span>
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -931,6 +1414,58 @@ const Dashboard: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* CARD 4: Live / Today's Matches Stat Card */}
+            <div
+              className="dash-metric-card"
+              style={{ cursor: "pointer", position: "relative" }}
+              onClick={() => setSelectedMenu("matches")}
+              title="Click to view live and today's schedule"
+              id="dash-card-live-matches"
+            >
+              <div>
+                <div className="dash-metric-card-header">
+                  <div className="dash-metric-title-group">
+                    <div className="dash-metric-icon-box" style={{ background: "#fee2e2", color: "#dc2626" }}>
+                      <Radio size={18} />
+                    </div>
+                    <span className="dash-metric-label">Today's Matches</span>
+                  </div>
+                  <button className="dash-three-dots" title="View all matches">
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+
+                <div className="dash-metric-big-number" style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
+                  {loading ? (
+                    <div className="dash-skeleton-pulse" style={{ height: "40px", width: "120px" }} />
+                  ) : (
+                    <>
+                      <span style={{ color: todayMatches.filter((m) => m.status === "live").length > 0 ? "#dc2626" : "#0f172a" }}>
+                        {todayMatches.filter((m) => m.status === "live").length}
+                      </span>
+                      <span style={{ fontSize: "1rem", color: "#64748b", fontWeight: 600 }}>
+                        Live / {todayMatches.length} Today
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                <div
+                  className="dash-trend-pill"
+                  style={{
+                    background: todayMatches.filter((m) => m.status === "live").length > 0 ? "#fee2e2" : "#f1f5f9",
+                    color: todayMatches.filter((m) => m.status === "live").length > 0 ? "#b91c1c" : "#475569",
+                  }}
+                >
+                  <span>
+                    ● {todayMatches.filter((m) => m.status === "live").length > 0
+                      ? `${todayMatches.filter((m) => m.status === "live").length} currently in action`
+                      : "Matches scheduled for today"}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* =========================================================
@@ -1048,6 +1583,110 @@ const Dashboard: React.FC = () => {
           </div>
 
           {/* =========================================================
+              LIVE & TODAY'S MATCHES SECTION
+              ========================================================= */}
+          <div className="dash-panel-card" style={{ marginBottom: "1.5rem" }} id="dash-section-live-matches">
+            <div className="dash-panel-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <Radio size={20} color="#dc2626" />
+                <div>
+                  <h2 className="dash-panel-title" style={{ margin: 0 }}>Live & Today's Matches</h2>
+                  <span style={{ fontSize: "0.78rem", color: "#64748b" }}>
+                    Matches currently in progress and scheduled for today
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <span
+                  style={{
+                    background: todayMatches.filter((m) => m.status === "live").length > 0 ? "#fee2e2" : "#f1f5f9",
+                    color: todayMatches.filter((m) => m.status === "live").length > 0 ? "#b91c1c" : "#475569",
+                    fontSize: "0.78rem",
+                    fontWeight: 800,
+                    padding: "0.25rem 0.65rem",
+                    borderRadius: "9999px",
+                  }}
+                >
+                  {todayMatches.filter((m) => m.status === "live").length} LIVE NOW
+                </span>
+                <button
+                  onClick={() => setSelectedMenu("matches")}
+                  className="dash-btn-secondary-pill"
+                  style={{ padding: "0.35rem 0.85rem", fontSize: "0.8rem", cursor: "pointer" }}
+                >
+                  Open Match Control Room &rarr;
+                </button>
+              </div>
+            </div>
+
+            {/* List of matches in progress and scheduled today */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "1rem", marginTop: "1rem" }}>
+              {todayMatches.slice(0, 3).map((match) => (
+                <div
+                  key={match.id}
+                  style={{
+                    background: match.status === "live" ? "#fff5f5" : "#f8fafc",
+                    border: `1px solid ${match.status === "live" ? "#fecaca" : "#e2e8f0"}`,
+                    borderRadius: "12px",
+                    padding: "1rem",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+                    <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#64748b" }}>
+                      {match.sportIcon} {match.tournamentName} &bull; {match.round}
+                    </span>
+                    <span
+                      className={`dash-status-pill ${
+                        match.status === "live"
+                          ? "live"
+                          : match.status === "completed"
+                          ? "success"
+                          : match.status === "disputed"
+                          ? "disputed"
+                          : "upcoming"
+                      }`}
+                    >
+                      {match.status === "live"
+                        ? `● ${match.statusLabel || "Live"}`
+                        : match.status === "completed"
+                        ? "✔ Completed"
+                        : match.status === "disputed"
+                        ? "⚠️ Disputed"
+                        : `⏰ ${match.timeDisplay || "Today"}`}
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "0.5rem 0" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <span style={{ fontWeight: 800, fontSize: "0.95rem", color: "#0f172a" }}>{match.teamA.name}</span>
+                    </div>
+                    <div style={{ fontWeight: 800, fontSize: "1.1rem", color: match.status === "live" ? "#dc2626" : "#475569" }}>
+                      {match.status === "today" ? "vs" : `${match.teamA.score} - ${match.teamB.score}`}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <span style={{ fontWeight: 800, fontSize: "0.95rem", color: "#0f172a" }}>{match.teamB.name}</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", paddingTop: "0.5rem", borderTop: "1px dashed rgba(0,0,0,0.08)", fontSize: "0.75rem", color: "#64748b" }}>
+                    <span>📍 {match.groundName}, {match.location}</span>
+                    <button
+                      onClick={() => setSelectedMenu("matches")}
+                      style={{ background: "none", border: "none", color: "#059669", fontWeight: 700, cursor: "pointer", padding: 0 }}
+                    >
+                      Match Details &rarr;
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* =========================================================
               BOTTOM ROW: Capacity Goals (My Savings Plan) & Recent Tournaments
               ========================================================= */}
           <div className="dash-bottom-grid">
@@ -1086,7 +1725,7 @@ const Dashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Goal 2: Prize Pool Funding */}
+                {/* Goal 2: Prize Pool Allocation */}
                 <div className="dash-goal-item">
                   <div className="dash-goal-header">
                     <div className="dash-goal-title-group">
@@ -1096,20 +1735,17 @@ const Dashboard: React.FC = () => {
                       <span className="dash-goal-name">Prize Pool Allocation</span>
                     </div>
                     <span className="dash-goal-percent">
-                      {Math.min(100, Math.round((stats.totalFeesUSD / (stats.totalPrizeUSD || 1)) * 100))}%
+                      {stats.prizePoolAllocationPercent}%
                     </span>
                   </div>
                   <div className="dash-goal-numbers">
-                    {formatMoney(stats.totalFeesUSD)} / {formatMoney(stats.totalPrizeUSD)} Collected
+                    {formatMoney(stats.totalFeesRaw)} / {formatMoney(stats.totalPrizeRaw)} Collected
                   </div>
                   <div className="dash-progress-track">
                     <div
                       className="dash-progress-fill"
                       style={{
-                        width: `${Math.min(
-                          100,
-                          Math.round((stats.totalFeesUSD / (stats.totalPrizeUSD || 1)) * 100)
-                        )}%`,
+                        width: `${Math.min(100, stats.prizePoolAllocationPercent)}%`,
                         background: "#d97706",
                       }}
                     />
@@ -1157,7 +1793,9 @@ const Dashboard: React.FC = () => {
                     <option value="all">Filter: All Status</option>
                     <option value="upcoming">Upcoming</option>
                     <option value="live">Live</option>
-                    <option value="post">Post/Completed</option>
+                    <option value="pending_approval">Pending Approval</option>
+                    <option value="disputed">Disputed</option>
+                    <option value="completed">Completed / Success</option>
                   </select>
                 </div>
               </div>
@@ -1236,6 +1874,10 @@ const Dashboard: React.FC = () => {
                                     ? "upcoming"
                                     : t.status === "live"
                                     ? "live"
+                                    : t.status === "disputed"
+                                    ? "disputed"
+                                    : t.status === "pending_approval" || t.status === "pending"
+                                    ? "pending"
                                     : "success"
                                 }`}
                               >
@@ -1243,6 +1885,10 @@ const Dashboard: React.FC = () => {
                                   ? "✔ Success"
                                   : t.status === "live"
                                   ? "● Live"
+                                  : t.status === "disputed"
+                                  ? "⚠️ Disputed"
+                                  : t.status === "pending_approval" || t.status === "pending"
+                                  ? "⏳ Pending"
                                   : "● Upcoming"}
                               </span>
                             </td>

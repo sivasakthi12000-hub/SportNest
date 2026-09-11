@@ -24,7 +24,7 @@ import {
   getIndianLocationsFromSupabase,
   getAvailableStates,
   getDistrictsForState,
-} from "../data/indiaLocations";
+} from "../utils/locationService";
 import { useAuth } from "../context/AuthContext";
 import "../styles/forms.css";
 
@@ -127,7 +127,7 @@ const PRESET_SPECIAL = [
 
 const AddTournament = () => {
   const navigate = useNavigate();
-  const { user, registerAdmin } = useAuth();
+  const { user, registerAdmin, login } = useAuth();
 
   const [sports, setSports] = useState([]);
   const [submitted, setSubmitted] = useState(false);
@@ -495,12 +495,26 @@ const AddTournament = () => {
     setLoading(false);
 
     if (res.success) {
-      setCreatedResult({
-        ...payload,
-        id: res.data?.id || Date.now(),
-        adminUsername: finalUsername,
+      // Auto login organizer credentials if password provided
+      if (organizerPassword) {
+        try {
+          await login(finalUsername, organizerPassword.trim());
+        } catch (authErr) {
+          console.warn("Direct login notice:", authErr);
+        }
+      }
+
+      // Immediately navigate directly to the Admin Dashboard (Admin role)
+      navigate("/admin", {
+        replace: true,
+        state: {
+          createdTournamentName: formData.name.trim(),
+          newlyCreated: true,
+          adminUsername: finalUsername,
+          tournamentId: res.data?.id,
+        },
       });
-      setSubmitted(true);
+      return;
     } else {
       setError(res.error || "Failed to create tournament in Supabase. Please try again.");
     }
