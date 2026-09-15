@@ -300,8 +300,8 @@ export const AdminTeamsView: React.FC<AdminTeamsViewProps> = ({
 
       {/* Register Team Modal */}
       {showAddModal && (
-        <div className="admin-modal-backdrop" onClick={() => setShowAddModal(false)}>
-          <div className="admin-modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="admin-modal-backdrop">
+          <div className="admin-modal-card">
             <div className="admin-modal-header">
               <h3>Register New Team / Squad</h3>
               <button

@@ -21,13 +21,31 @@ interface UserSession {
 // Backend in-memory session registry (mapping token -> user session JSON)
 const activeSessionsJSON: Record<string, UserSession> = {};
 
+interface AdminAccount {
+  password: string;
+  name: string;
+  email: string;
+  role: string;
+  status?: string;
+}
+
+const ADMINS_FILE = path.join(process.cwd(), "data", "registered_admins.json");
+
 // Registered admin accounts store (username -> { password, name, email, role })
-const registeredAdminsStore: Record<string, { password: string; name: string; email: string; role: string }> = {
+let registeredAdminsStore: Record<string, AdminAccount> = {
   admin123: {
     password: "admin123",
-    name: "Sivasakthi (Owner)",
+    name: "Sivasakthi (Super Admin)",
     email: "sivasakthi12000@gmail.com",
     role: "superadmin",
+    status: "active",
+  },
+  sakthi01: {
+    password: "Sakthi@53",
+    name: "sakthi01 (Tournament Organizer)",
+    email: "sakthi01@sportsnest.app",
+    role: "admin",
+    status: "active",
   },
 };
 
@@ -40,16 +58,74 @@ interface TrackedOrganizer {
   tournamentCount?: number;
 }
 
-const trackedOrganizersStore: TrackedOrganizer[] = [
+let trackedOrganizersStore: TrackedOrganizer[] = [
   {
     username: "admin123",
-    name: "Sivasakthi (Owner)",
+    name: "Sivasakthi (Super Admin)",
     email: "sivasakthi12000@gmail.com",
     role: "superadmin",
-    createdAt: new Date().toISOString(),
+    createdAt: "2026-09-01T00:00:00.000Z",
     tournamentCount: 50,
   },
+  {
+    username: "sakthi01",
+    name: "sakthi01 (Tournament Organizer)",
+    email: "sakthi01@sportsnest.app",
+    role: "admin",
+    createdAt: "2026-09-15T00:00:00.000Z",
+    tournamentCount: 1,
+  },
 ];
+
+function loadAdminsFromDisk() {
+  try {
+    if (fs.existsSync(ADMINS_FILE)) {
+      const content = fs.readFileSync(ADMINS_FILE, "utf-8");
+      const parsed = JSON.parse(content);
+      if (parsed.admins && typeof parsed.admins === "object") {
+        registeredAdminsStore = { ...registeredAdminsStore, ...parsed.admins };
+      }
+      if (Array.isArray(parsed.organizers)) {
+        const existingUsers = new Set(trackedOrganizersStore.map((o) => o.username.toLowerCase()));
+        for (const org of parsed.organizers) {
+          if (!existingUsers.has(org.username.toLowerCase())) {
+            trackedOrganizersStore.push(org);
+            existingUsers.add(org.username.toLowerCase());
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to load registered admins from disk:", err);
+  }
+}
+
+function saveAdminsToDisk() {
+  try {
+    const dir = path.dirname(ADMINS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(
+      ADMINS_FILE,
+      JSON.stringify(
+        {
+          admins: registeredAdminsStore,
+          organizers: trackedOrganizersStore,
+        },
+        null,
+        2
+      ),
+      "utf-8"
+    );
+  } catch (err) {
+    console.warn("Failed to persist registered admins to disk:", err);
+  }
+}
+
+// Initial load on server initialization
+loadAdminsFromDisk();
+saveAdminsToDisk();
 
 function cleanSupabaseUrl(rawUrl: string): string {
   if (!rawUrl) return "";
@@ -106,19 +182,27 @@ async function startServer() {
     const trimmedUser = String(username || "").trim();
     const trimmedPass = String(password || "").trim();
 
-    // Check against registered accounts store
-    const account = registeredAdminsStore[trimmedUser] || registeredAdminsStore[trimmedUser.toLowerCase()];
+    // Reload from persistent disk store
+    loadAdminsFromDisk();
+
+    // Case-insensitive username match
+    const normalizedUser = trimmedUser.toLowerCase();
+    const matchedKey = Object.keys(registeredAdminsStore).find(
+      (k) => k.toLowerCase() === normalizedUser
+    );
+    const account = matchedKey ? registeredAdminsStore[matchedKey] : null;
 
     if (account && account.password === trimmedPass) {
-      const token = generateBackendToken(trimmedUser);
+      const finalUsername = matchedKey || trimmedUser;
+      const token = generateBackendToken(finalUsername);
       const now = new Date();
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       const session: UserSession = {
-        username: trimmedUser,
-        name: account.name || trimmedUser,
+        username: finalUsername,
+        name: account.name || finalUsername,
         role: account.role || "admin",
-        email: account.email || `${trimmedUser}@sportsnest.app`,
+        email: account.email || `${finalUsername}@sportsnest.app`,
         token,
         tokenType: "Bearer",
         loggedInAt: now.toISOString(),
@@ -159,6 +243,8 @@ async function startServer() {
       });
     }
 
+    loadAdminsFromDisk();
+
     // Role flag: "superadmin" only for sivasakthi / admin123, otherwise "admin"
     const isSuperAdmin = trimmedUser.toLowerCase() === "admin123" || email === "sivasakthi12000@gmail.com";
     const role = isSuperAdmin ? "superadmin" : "admin";
@@ -171,6 +257,7 @@ async function startServer() {
       name: displayName,
       email: userEmail,
       role,
+      status: "active",
     };
 
     // Track newly registered organizer
@@ -194,6 +281,9 @@ async function startServer() {
         tournamentCount: 1,
       });
     }
+
+    // Persist immediately to disk
+    saveAdminsToDisk();
 
     // Immediately generate token & active session
     const token = generateBackendToken(trimmedUser);
@@ -277,6 +367,7 @@ async function startServer() {
       createdAt: new Date().toISOString(),
       tournamentCount: 0,
     });
+    saveAdminsToDisk();
     res.json({ success: true, message: `Account created for ${trimmedUser}` });
   });
 
@@ -300,6 +391,7 @@ async function startServer() {
       if (email) tracked.email = email;
       if (role) tracked.role = user.role;
     }
+    saveAdminsToDisk();
     res.json({ success: true, message: `Updated user ${username}`, user });
   });
 
@@ -311,9 +403,143 @@ async function startServer() {
     const user = registeredAdminsStore[username];
     if (user) {
       (user as any).status = (user as any).status === "inactive" ? "active" : "inactive";
+      saveAdminsToDisk();
       return res.json({ success: true, message: `User status updated to ${(user as any).status}` });
     }
     res.status(404).json({ success: false, error: "User not found" });
+  });
+
+  // =======================================================
+  // CUSTOM SPORTS PERSISTENCE API
+  // =======================================================
+  const CUSTOM_SPORTS_FILE = path.join(process.cwd(), "data", "custom_sports.json");
+  let customSportsStore: any[] = [];
+
+  function loadCustomSportsFromDisk() {
+    try {
+      if (fs.existsSync(CUSTOM_SPORTS_FILE)) {
+        const raw = fs.readFileSync(CUSTOM_SPORTS_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          customSportsStore = parsed;
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Notice loading custom sports from disk:", e);
+    }
+  }
+
+  function saveCustomSportsToDisk() {
+    try {
+      const dataDir = path.dirname(CUSTOM_SPORTS_FILE);
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      fs.writeFileSync(CUSTOM_SPORTS_FILE, JSON.stringify(customSportsStore, null, 2), "utf-8");
+    } catch (e) {
+      console.error("Failed to save custom sports to disk:", e);
+    }
+  }
+
+  loadCustomSportsFromDisk();
+
+  app.get("/api/sports", (req, res) => {
+    loadCustomSportsFromDisk();
+    res.json({ success: true, sports: customSportsStore });
+  });
+
+  app.post("/api/sports", (req, res) => {
+    const { name, groundName, surface, format, rules, description, accentColor } = req.body || {};
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, error: "Sport name is required." });
+    }
+
+    loadCustomSportsFromDisk();
+
+    const cleanName = name.trim();
+    // Check if already exists
+    const existing = customSportsStore.find((s) => s.name.toLowerCase() === cleanName.toLowerCase());
+    if (existing) {
+      return res.json({ success: true, data: existing, message: "Sport already exists" });
+    }
+
+    const nextId = 100 + customSportsStore.length + 1;
+    const newSport = {
+      id: nextId,
+      name: cleanName,
+      groundName: (groundName || "").trim() || `${cleanName} Arena`,
+      surface: (surface || "").trim() || "Natural / Synthetic",
+      format: (format || "").trim() || "Standard Competition",
+      rules: (rules || "").trim() || "Standard Official Rules",
+      description: (description || "").trim() || `Official competition discipline for ${cleanName}.`,
+      accentColor: accentColor || "#10b981",
+      image: `${cleanName.toLowerCase().replace(/\s+/g, "")}.jpg`,
+      createdAt: new Date().toISOString(),
+    };
+
+    customSportsStore.push(newSport);
+    saveCustomSportsToDisk();
+
+    console.log(`[Backend Sports] New sport added: ${cleanName} (ID: ${nextId})`);
+    res.json({ success: true, data: newSport, message: `Sport "${cleanName}" saved successfully.` });
+  });
+
+  // =======================================================
+  // TOURNAMENT DATE & DEADLINE MANAGEMENT API
+  // =======================================================
+  const TOURNAMENT_OVERRIDES_FILE = path.join(process.cwd(), "data", "tournament_overrides.json");
+  let tournamentOverrides: Record<string, any> = {};
+
+  function loadTournamentOverrides() {
+    try {
+      if (fs.existsSync(TOURNAMENT_OVERRIDES_FILE)) {
+        const raw = fs.readFileSync(TOURNAMENT_OVERRIDES_FILE, "utf-8");
+        tournamentOverrides = JSON.parse(raw) || {};
+      }
+    } catch (e) {
+      console.warn("Notice loading tournament overrides:", e);
+    }
+  }
+
+  function saveTournamentOverrides() {
+    try {
+      const dataDir = path.dirname(TOURNAMENT_OVERRIDES_FILE);
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      fs.writeFileSync(TOURNAMENT_OVERRIDES_FILE, JSON.stringify(tournamentOverrides, null, 2), "utf-8");
+    } catch (e) {
+      console.error("Failed to save tournament overrides:", e);
+    }
+  }
+
+  loadTournamentOverrides();
+
+  app.get("/api/tournaments/overrides", (req, res) => {
+    loadTournamentOverrides();
+    res.json({ success: true, overrides: tournamentOverrides });
+  });
+
+  app.patch("/api/tournaments/:id/dates", (req, res) => {
+    const id = req.params.id;
+    const { lastRegistrationDate, date } = req.body || {};
+
+    if (!lastRegistrationDate && !date) {
+      return res.status(400).json({ success: false, error: "Must provide lastRegistrationDate or date" });
+    }
+
+    loadTournamentOverrides();
+    tournamentOverrides[id] = {
+      ...(tournamentOverrides[id] || {}),
+      ...(lastRegistrationDate ? { lastRegistrationDate } : {}),
+      ...(date ? { date } : {}),
+      updatedAt: new Date().toISOString(),
+    };
+    saveTournamentOverrides();
+
+    console.log(`[Tournament Dates] Updated dates for tournament ${id}:`, tournamentOverrides[id]);
+    res.json({ success: true, id, dates: tournamentOverrides[id], message: "Tournament dates updated successfully." });
   });
 
   // 2. Backend Logout API:

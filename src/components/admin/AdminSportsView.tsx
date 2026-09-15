@@ -5,12 +5,23 @@ import { Sport, createSport } from "../../services/dataService";
 interface AdminSportsViewProps {
   sports: Sport[];
   onRefresh: () => void;
+  userRole?: string;
+  relevantSportIds?: Set<number>;
 }
 
-export const AdminSportsView: React.FC<AdminSportsViewProps> = ({ sports, onRefresh }) => {
+export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
+  sports,
+  onRefresh,
+  userRole,
+  relevantSportIds,
+}) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+
+  const hasMySports = !!(relevantSportIds && relevantSportIds.size > 0);
+  const isOrganizer = userRole !== "superadmin";
+  const [filterMode, setFilterMode] = useState<"my" | "all">(isOrganizer && hasMySports ? "my" : "all");
 
   // New sport form
   const [name, setName] = useState("");
@@ -44,7 +55,7 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({ sports, onRefr
       });
 
       if (res.success) {
-        showToast(`Sport "${name}" successfully added to Supabase!`, "success");
+        showToast(`Sport "${name}" successfully added to system!`, "success");
         setName("");
         setGroundName("");
         setSurface("");
@@ -63,6 +74,9 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({ sports, onRefr
   };
 
   const filtered = sports.filter((s) => {
+    if (filterMode === "my" && relevantSportIds && relevantSportIds.size > 0) {
+      if (!relevantSportIds.has(s.id)) return false;
+    }
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
     return (
@@ -127,6 +141,71 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({ sports, onRefr
           </button>
         </div>
       </div>
+
+      {/* Organizer Chosen Sports Filter Tabs */}
+      {hasMySports && (
+        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.25rem" }}>
+          <button
+            onClick={() => setFilterMode("my")}
+            style={{
+              padding: "0.45rem 0.9rem",
+              borderRadius: "8px",
+              fontSize: "0.82rem",
+              fontWeight: 700,
+              border: filterMode === "my" ? "1px solid #059669" : "1px solid #e2e8f0",
+              background: filterMode === "my" ? "#ecfdf5" : "#ffffff",
+              color: filterMode === "my" ? "#059669" : "#64748b",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.4rem",
+            }}
+          >
+            <span>🎯 My Tournament Disciplines</span>
+            <span
+              style={{
+                background: filterMode === "my" ? "#059669" : "#f1f5f9",
+                color: filterMode === "my" ? "#ffffff" : "#64748b",
+                padding: "0.1rem 0.45rem",
+                borderRadius: "9999px",
+                fontSize: "0.72rem",
+              }}
+            >
+              {relevantSportIds?.size || 0}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setFilterMode("all")}
+            style={{
+              padding: "0.45rem 0.9rem",
+              borderRadius: "8px",
+              fontSize: "0.82rem",
+              fontWeight: 700,
+              border: filterMode === "all" ? "1px solid #059669" : "1px solid #e2e8f0",
+              background: filterMode === "all" ? "#ecfdf5" : "#ffffff",
+              color: filterMode === "all" ? "#059669" : "#64748b",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.4rem",
+            }}
+          >
+            <span>🌐 All Sports</span>
+            <span
+              style={{
+                background: filterMode === "all" ? "#059669" : "#f1f5f9",
+                color: filterMode === "all" ? "#ffffff" : "#64748b",
+                padding: "0.1rem 0.45rem",
+                borderRadius: "9999px",
+                fontSize: "0.72rem",
+              }}
+            >
+              {sports.length}
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* Sports Grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "1.25rem" }}>
@@ -200,8 +279,8 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({ sports, onRefr
 
       {/* Add Sport Modal */}
       {showAddModal && (
-        <div className="admin-modal-backdrop" onClick={() => setShowAddModal(false)}>
-          <div className="admin-modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="admin-modal-backdrop">
+          <div className="admin-modal-card">
             <div className="admin-modal-header">
               <h3>Add New Sport Discipline</h3>
               <button

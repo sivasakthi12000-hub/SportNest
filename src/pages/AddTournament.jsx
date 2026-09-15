@@ -505,7 +505,7 @@ const AddTournament = () => {
       }
 
       // Immediately navigate directly to the Admin Dashboard (Admin role)
-      navigate("/admin", {
+      navigate("/dashboard", {
         replace: true,
         state: {
           createdTournamentName: formData.name.trim(),

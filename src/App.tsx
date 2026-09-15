@@ -5,6 +5,7 @@
 
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 import Navbar from "./components/Navbar";
 
@@ -24,20 +25,23 @@ export default function App() {
   return (
     <Router>
       <AuthProvider>
-        <Navbar />
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/sports" element={<Sports />} />
-          <Route path="/tournaments" element={<Tournaments />} />
-          <Route path="/tournament/:id" element={<TournamentDetails />} />
-          <Route path="/tournament/:id/teams" element={<TeamList />} />
-          <Route path="/team/:id" element={<TeamProfile />} />
-          <Route path="/register/:tournamentId" element={<RegisterTeam />} />
-          <Route path="/bracket/:tournamentId" element={<Bracket />} />
-          <Route path="/add-tournament" element={<AddTournament />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-        </Routes>
+        <ErrorBoundary>
+          <Navbar />
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/sports" element={<Sports />} />
+            <Route path="/tournaments" element={<Tournaments />} />
+            <Route path="/tournament/:id" element={<TournamentDetails />} />
+            <Route path="/tournament/:id/teams" element={<TeamList />} />
+            <Route path="/team/:id" element={<TeamProfile />} />
+            <Route path="/register/:tournamentId" element={<RegisterTeam />} />
+            <Route path="/bracket/:tournamentId" element={<Bracket />} />
+            <Route path="/add-tournament" element={<AddTournament />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/admin" element={<Dashboard />} />
+          </Routes>
+        </ErrorBoundary>
       </AuthProvider>
     </Router>
   );

@@ -28,12 +28,17 @@ export const TournamentPosterStudio: React.FC<TournamentPosterStudioProps> = ({
   const [newSponsorContribution, setNewSponsorContribution] = useState("");
   const [newSponsorTagline, setNewSponsorTagline] = useState("");
 
-  const currentTourney =
+  const currentTourney: Tournament =
     tournaments.find((t) => t.id === activeTourneyId) || tournaments[0] || {
       id: 1,
       name: "SportsNest Championship Trophy",
+      sportId: 1,
       sportName: "Soccer",
       location: "Chennai",
+      address: "Anna Salai, Triplicane",
+      district: "Chennai",
+      state: "Tamil Nadu",
+      pincode: "600002",
       groundName: "Jawaharlal Nehru Stadium",
       date: "2026-03-25",
       lastRegistrationDate: "2026-03-20",
@@ -41,6 +46,8 @@ export const TournamentPosterStudio: React.FC<TournamentPosterStudioProps> = ({
       prizeAmount: 75000,
       maxTeams: 16,
       registeredTeams: 12,
+      status: "upcoming",
+      description: "Official SportsNest Championship",
     };
 
   const [sponsorsList, setSponsorsList] = useState<Sponsor[]>(() =>

@@ -33,6 +33,66 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const STORAGE_KEY = "sportsnest_auth_user";
 const TOKEN_KEY = "sportsnest_auth_token";
+const ADMIN_ACCOUNTS_KEY = "sportsnest_registered_admins_v2";
+
+interface StoredAdminAccount {
+  username: string;
+  password: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
+const DEFAULT_ADMIN_ACCOUNTS: StoredAdminAccount[] = [
+  {
+    username: "admin123",
+    password: "admin123",
+    name: "Sivasakthi (Super Admin)",
+    email: "sivasakthi12000@gmail.com",
+    role: "superadmin",
+  },
+  {
+    username: "sakthi01",
+    password: "Sakthi@53",
+    name: "sakthi01 (Tournament Organizer)",
+    email: "sakthi01@sportsnest.app",
+    role: "admin",
+  },
+];
+
+function getStoredAccounts(): StoredAdminAccount[] {
+  try {
+    const raw = localStorage.getItem(ADMIN_ACCOUNTS_KEY);
+    if (!raw) return DEFAULT_ADMIN_ACCOUNTS;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      const usernames = new Set(parsed.map((a: any) => String(a.username).toLowerCase()));
+      const merged = [...parsed];
+      for (const def of DEFAULT_ADMIN_ACCOUNTS) {
+        if (!usernames.has(def.username.toLowerCase())) {
+          merged.push(def);
+        }
+      }
+      return merged;
+    }
+  } catch (e) {
+    console.warn("Failed to parse stored admin accounts:", e);
+  }
+  return DEFAULT_ADMIN_ACCOUNTS;
+}
+
+function saveStoredAccount(account: StoredAdminAccount) {
+  try {
+    const existing = getStoredAccounts();
+    const filtered = existing.filter(
+      (a) => a.username.toLowerCase() !== account.username.toLowerCase()
+    );
+    filtered.push(account);
+    localStorage.setItem(ADMIN_ACCOUNTS_KEY, JSON.stringify(filtered));
+  } catch (e) {
+    console.warn("Failed to persist stored admin account:", e);
+  }
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(() => {
@@ -60,8 +120,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user]);
 
   /**
-   * Login: calls real backend API /api/auth/login to generate the token on the backend,
-   * save the session in the backend JSON store, and return the session JSON containing the token.
+   * Login: calls backend API /api/auth/login to generate the token on the backend,
+   * with guaranteed fallback and synchronization for tournament organizers and admins.
    */
   const login = async (usernameInput: string, passwordInput: string): Promise<LoginResponse> => {
     const trimmedUser = usernameInput.trim();
@@ -84,6 +144,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           localStorage.setItem(STORAGE_KEY, sessionJSON);
           localStorage.setItem(TOKEN_KEY, data.token);
+          saveStoredAccount({
+            username: authenticatedUser.username,
+            password: trimmedPass,
+            name: authenticatedUser.name,
+            email: authenticatedUser.email || `${authenticatedUser.username}@sportsnest.app`,
+            role: authenticatedUser.role,
+          });
         } catch (e) {
           console.error("Failed to save to localStorage:", e);
         }
@@ -95,51 +162,67 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           json: sessionJSON,
         };
       }
-
-      return {
-        success: false,
-        error: data.error || "Authentication failed. Please verify credentials.",
-      };
     } catch (error: any) {
-      console.warn("Backend API request failed, falling back to local auth:", error);
-      // Client-side fallback if server is booting
-      if (
-        (trimmedUser === "admin123" || trimmedUser.toLowerCase() === "admin123") &&
-        trimmedPass === "admin123"
-      ) {
-        const fallbackToken = `ast_admin123_${Date.now()}_${Math.random().toString(36).substring(2, 12)}`;
-        const now = new Date();
-        const expiresDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      console.warn("Backend API login request error, checking local organizer credentials:", error);
+    }
 
-        const authenticatedUser: AuthUser = {
-          username: "admin123",
-          name: "Admin User",
-          role: "Administrator",
-          email: "sivasakthi12000@gmail.com",
-          token: fallbackToken,
-          tokenType: "Bearer",
-          loggedInAt: now.toISOString(),
-          expiresAt: expiresDate.toISOString(),
-        };
+    // 2. Resilient fallback check: check stored accounts (including sakthi01 and admin123)
+    const storedAccounts = getStoredAccounts();
+    const matchedAccount = storedAccounts.find(
+      (a) =>
+        a.username.toLowerCase() === trimmedUser.toLowerCase() &&
+        a.password === trimmedPass
+    );
 
-        setUser(authenticatedUser);
-        const sessionJSON = JSON.stringify(authenticatedUser, null, 2);
+    if (matchedAccount) {
+      const fallbackToken = `ast_${matchedAccount.username}_${Date.now()}_${Math.random().toString(36).substring(2, 12)}`;
+      const now = new Date();
+      const expiresDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      const authenticatedUser: AuthUser = {
+        username: matchedAccount.username,
+        name: matchedAccount.name || matchedAccount.username,
+        role: matchedAccount.role,
+        email: matchedAccount.email || `${matchedAccount.username}@sportsnest.app`,
+        token: fallbackToken,
+        tokenType: "Bearer",
+        loggedInAt: now.toISOString(),
+        expiresAt: expiresDate.toISOString(),
+      };
+
+      setUser(authenticatedUser);
+      const sessionJSON = JSON.stringify(authenticatedUser, null, 2);
+      try {
         localStorage.setItem(STORAGE_KEY, sessionJSON);
         localStorage.setItem(TOKEN_KEY, fallbackToken);
-
-        return {
-          success: true,
-          token: fallbackToken,
-          user: authenticatedUser,
-          json: sessionJSON,
-        };
+      } catch (e) {
+        console.error("Failed to save session to localStorage:", e);
       }
 
+      // Re-sync with backend in case backend restarted
+      fetch("/api/auth/register-admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: matchedAccount.username,
+          password: matchedAccount.password,
+          email: matchedAccount.email,
+          name: matchedAccount.name,
+        }),
+      }).catch((e) => console.warn("Background auth re-sync notice:", e));
+
       return {
-        success: false,
-        error: "Network error or invalid credentials.",
+        success: true,
+        token: fallbackToken,
+        user: authenticatedUser,
+        json: sessionJSON,
       };
     }
+
+    return {
+      success: false,
+      error: "Invalid credentials. If you are superadmin use admin123 / admin123, or use your tournament organizer credentials.",
+    };
   };
 
   /**
@@ -154,6 +237,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<LoginResponse> => {
     const trimmedUser = usernameInput.trim();
     const trimmedPass = passwordInput.trim();
+    const isSuperAdmin = trimmedUser.toLowerCase() === "admin123" || emailInput === "sivasakthi12000@gmail.com";
+    const role = isSuperAdmin ? "superadmin" : "admin";
+    const userEmail = emailInput || `${trimmedUser}@sportsnest.app`;
+    const displayName = nameInput || trimmedUser;
+
+    // Cache locally immediately
+    saveStoredAccount({
+      username: trimmedUser,
+      password: trimmedPass,
+      email: userEmail,
+      name: displayName,
+      role,
+    });
 
     try {
       const response = await fetch("/api/auth/register-admin", {
@@ -162,8 +258,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({
           username: trimmedUser,
           password: trimmedPass,
-          email: emailInput || `${trimmedUser}@sportsnest.app`,
-          name: nameInput || trimmedUser,
+          email: userEmail,
+          name: displayName,
         }),
       });
 
@@ -196,16 +292,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error: any) {
       console.warn("Backend register admin error, using resilient fallback:", error);
       const fallbackToken = `ast_${trimmedUser}_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-      const isSuperAdmin = trimmedUser.toLowerCase() === "admin123" || emailInput === "sivasakthi12000@gmail.com";
-      const role = isSuperAdmin ? "superadmin" : "admin";
       const now = new Date();
       const expiresDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       const authenticatedUser: AuthUser = {
         username: trimmedUser,
-        name: nameInput || trimmedUser,
+        name: displayName,
         role,
-        email: emailInput || `${trimmedUser}@sportsnest.app`,
+        email: userEmail,
         token: fallbackToken,
         tokenType: "Bearer",
         loggedInAt: now.toISOString(),

@@ -486,7 +486,6 @@ export const AdminUsersView: React.FC = () => {
             justifyContent: "center",
             padding: "1rem",
           }}
-          onClick={() => setShowCreateModal(false)}
         >
           <div
             style={{
@@ -497,7 +496,6 @@ export const AdminUsersView: React.FC = () => {
               maxWidth: "480px",
               boxShadow: "0 20px 25px -5px rgba(0,0,0,0.2)",
             }}
-            onClick={(e) => e.stopPropagation()}
           >
             <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.5rem" }}>
               Create Administrator Account
@@ -641,10 +639,6 @@ export const AdminUsersView: React.FC = () => {
             justifyContent: "center",
             padding: "1rem",
           }}
-          onClick={() => {
-            setShowEditModal(false);
-            setEditingUser(null);
-          }}
         >
           <div
             style={{
@@ -655,7 +649,6 @@ export const AdminUsersView: React.FC = () => {
               maxWidth: "480px",
               boxShadow: "0 20px 25px -5px rgba(0,0,0,0.2)",
             }}
-            onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
               <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0f172a", margin: 0 }}>

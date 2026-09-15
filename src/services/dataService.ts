@@ -53,12 +53,15 @@ export function normalizeSport(s: any): Sport {
 export interface PrizeTier {
   position: string;
   amount: number;
+  label?: string;
 }
 
 export interface Tournament {
   id: number;
   name: string;
   sportId: number;
+  sportName?: string;
+  sport?: string;
   location: string;
   address?: string;
   pincode?: string;
@@ -314,16 +317,59 @@ export const DEFAULT_FALLBACK_SPORTS: Sport[] = [
   },
 ];
 
-// All tournaments fetched directly from Supabase
-export const DEFAULT_FALLBACK_TOURNAMENTS: Tournament[] = [];
-
+// Tournaments data service - All tournaments are fetched and persisted directly in Supabase
 let lastDataServiceError: string | null = null;
 export function getLastDataServiceError(): string | null {
   return lastDataServiceError;
 }
 
-// Fetch all sports directly from Supabase
+const CUSTOM_SPORTS_KEY = "sportsnest_custom_sports_v2";
+const TOURNAMENT_OVERRIDES_KEY = "sportsnest_tournament_overrides_v2";
+
+export function getLocalCustomSports(): Sport[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_SPORTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(normalizeSport) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalCustomSport(sport: Sport) {
+  try {
+    const current = getLocalCustomSports();
+    const filtered = current.filter((s) => s.id !== sport.id && s.name.toLowerCase() !== sport.name.toLowerCase());
+    filtered.push(sport);
+    localStorage.setItem(CUSTOM_SPORTS_KEY, JSON.stringify(filtered));
+  } catch (e) {
+    console.warn("Notice saving custom sport to localStorage:", e);
+  }
+}
+
+export function getLocalTournamentOverrides(): Record<string, { lastRegistrationDate?: string; date?: string }> {
+  try {
+    const raw = localStorage.getItem(TOURNAMENT_OVERRIDES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveLocalTournamentOverride(id: number | string, override: { lastRegistrationDate?: string; date?: string }) {
+  try {
+    const all = getLocalTournamentOverrides();
+    all[String(id)] = { ...(all[String(id)] || {}), ...override };
+    localStorage.setItem(TOURNAMENT_OVERRIDES_KEY, JSON.stringify(all));
+  } catch (e) {
+    console.warn("Notice saving tournament override:", e);
+  }
+}
+
+// Fetch all sports directly from Supabase + custom sports
 export async function getSports(): Promise<Sport[]> {
+  let baseSports: Sport[] = [];
   const client = getSupabase();
   if (client) {
     try {
@@ -334,22 +380,43 @@ export async function getSports(): Promise<Sport[]> {
 
       if (!error && data && data.length > 0) {
         lastDataServiceError = null;
-        return data.map(normalizeSport);
-      }
-
-      if (error) {
-        // Log gently as warn so console isn't flooded with red errors
+        baseSports = data.map(normalizeSport);
+      } else if (error) {
         console.warn("Supabase sports query notice:", error.message);
         lastDataServiceError = `Sports query notice: ${error.message}`;
+        baseSports = [...DEFAULT_FALLBACK_SPORTS];
       }
     } catch (err: any) {
       console.warn("Notice fetching sports from Supabase:", err?.message || err);
       lastDataServiceError = err?.message || "Failed to fetch sports";
+      baseSports = [...DEFAULT_FALLBACK_SPORTS];
     }
+  } else {
+    baseSports = [...DEFAULT_FALLBACK_SPORTS];
   }
 
-  // Gracefully fallback to default sports so UI remains functional
-  return DEFAULT_FALLBACK_SPORTS;
+  // Load custom sports from backend server & localStorage
+  const localCustom = getLocalCustomSports();
+  let serverCustom: Sport[] = [];
+  try {
+    const resp = await fetch("/api/sports");
+    if (resp.ok) {
+      const json = await resp.json();
+      if (json.success && Array.isArray(json.sports)) {
+        serverCustom = json.sports.map(normalizeSport);
+      }
+    }
+  } catch {
+    // Network or server starting
+  }
+
+  // Merge sports uniquely by name and id
+  const sportsMap = new Map<string, Sport>();
+  baseSports.forEach((s) => sportsMap.set(s.name.toLowerCase(), s));
+  localCustom.forEach((s) => sportsMap.set(s.name.toLowerCase(), s));
+  serverCustom.forEach((s) => sportsMap.set(s.name.toLowerCase(), s));
+
+  return Array.from(sportsMap.values()).sort((a, b) => a.id - b.id);
 }
 
 // Local store for user-created tournaments to guarantee instant preview and responsiveness
@@ -376,6 +443,20 @@ function saveLocalCreatedTournament(t: Tournament) {
   }
 }
 
+function applyTournamentOverrides(tourneys: Tournament[]): Tournament[] {
+  const overrides = getLocalTournamentOverrides();
+  if (!overrides || Object.keys(overrides).length === 0) return tourneys;
+  return tourneys.map((t) => {
+    const o = overrides[String(t.id)];
+    if (!o) return t;
+    return {
+      ...t,
+      lastRegistrationDate: o.lastRegistrationDate || t.lastRegistrationDate,
+      date: o.date || t.date,
+    };
+  });
+}
+
 // Fetch all tournaments directly from Supabase
 export async function getTournaments(): Promise<Tournament[]> {
   const localList = getLocalCreatedTournaments();
@@ -386,36 +467,16 @@ export async function getTournaments(): Promise<Tournament[]> {
       const { data, error } = await client
         .from("tournaments")
         .select("*")
-        .order("id", { ascending: true });
+        .order("id", { ascending: false });
 
       if (!error && data) {
         lastDataServiceError = null;
-        if (data.length > 0) {
-          const allNormalized = data.map(normalizeTournament);
-          
-          // Curate: 5 tournaments per sport, in Tamil Nadu with statuses (complete, full, ongoing, upcoming)
-          const tnTournaments = allNormalized.filter(
-            (t) => (t.state && t.state.toLowerCase() === "tamil nadu") || (t.id >= 1 && t.id <= 50)
-          );
-          const pool = tnTournaments.length >= 10 ? tnTournaments : allNormalized;
+        const allNormalized = data.map(normalizeTournament);
 
-          const sportsMap = new Map<number, Tournament[]>();
-          for (const t of pool) {
-            const list = sportsMap.get(t.sportId) || [];
-            if (list.length < 5) {
-              list.push(t);
-              sportsMap.set(t.sportId, list);
-            }
-          }
-          const curatedDbList: Tournament[] = [];
-          sportsMap.forEach((items) => curatedDbList.push(...items));
-          const dbList = curatedDbList.length > 0 ? curatedDbList : allNormalized.slice(0, 50);
-
-          // Merge local tournaments that aren't already present by ID
-          const existingIds = new Set(dbList.map((t) => t.id));
-          const uniqueLocal = localList.filter((t) => !existingIds.has(t.id));
-          return [...uniqueLocal, ...dbList];
-        }
+        // Merge any locally created tournaments that haven't been assigned a remote ID
+        const existingIds = new Set(allNormalized.map((t) => t.id));
+        const uniqueLocal = localList.filter((t) => !existingIds.has(t.id));
+        return applyTournamentOverrides([...uniqueLocal, ...allNormalized]);
       }
 
       if (error) {
@@ -428,15 +489,18 @@ export async function getTournaments(): Promise<Tournament[]> {
     }
   }
 
-  // Return only user created or empty array if failed
-  return localList;
+  // If Supabase is unreachable, return any user-created local records
+  return applyTournamentOverrides(localList);
 }
 
 // Fetch tournament by ID directly from Supabase
 export async function getTournamentById(id: number): Promise<Tournament | null> {
   const localList = getLocalCreatedTournaments();
   const localMatch = localList.find((t) => t.id === Number(id));
-  if (localMatch) return localMatch;
+  if (localMatch) {
+    const [overridden] = applyTournamentOverrides([localMatch]);
+    return overridden;
+  }
 
   const client = getSupabase();
   if (client) {
@@ -448,7 +512,9 @@ export async function getTournamentById(id: number): Promise<Tournament | null> 
         .maybeSingle();
 
       if (!error && data) {
-        return normalizeTournament(data);
+        const normalized = normalizeTournament(data);
+        const [overridden] = applyTournamentOverrides([normalized]);
+        return overridden;
       }
       if (error) {
         console.warn("Supabase tournament by id notice:", error.message);
@@ -460,9 +526,7 @@ export async function getTournamentById(id: number): Promise<Tournament | null> 
     }
   }
 
-  // Fallback to default tournament if exists
-  const fallback = DEFAULT_FALLBACK_TOURNAMENTS.find((t) => t.id === Number(id));
-  return fallback || null;
+  return null;
 }
 
 // Fetch teams for a tournament directly from Supabase
@@ -809,7 +873,7 @@ export async function deleteTeam(id: number, tournamentId?: number): Promise<{ s
   return { success: false, error: "Supabase connection is not configured." };
 }
 
-// Create sport in Supabase with resilient schema fallback
+// Create sport in Supabase with resilient backend and localStorage fallback
 export async function createSport(sport: {
   name: string;
   groundName?: string;
@@ -819,42 +883,134 @@ export async function createSport(sport: {
   rules?: string;
   description?: string;
   accentColor?: string;
-}): Promise<{ success: boolean; data?: any; error?: string }> {
+}): Promise<{ success: boolean; data?: Sport; error?: string }> {
+  const cleanName = sport.name.trim();
+  const generatedId = Date.now() % 100000;
+  const localSport: Sport = {
+    id: generatedId,
+    name: cleanName,
+    image: `${cleanName.toLowerCase().replace(/\s+/g, "")}.jpg`,
+    imageUrl: `${cleanName.toLowerCase().replace(/\s+/g, "")}.jpg`,
+    groundName: sport.groundName || `${cleanName} Arena`,
+    surface: sport.surface || "Synthetic / Natural",
+    format: sport.format || "Standard Competition",
+    category: sport.category || "Arena",
+    rules: sport.rules || "Standard Official Rules",
+    description: sport.description || `Sanctioned tournament discipline for ${cleanName}.`,
+    accentColor: sport.accentColor || "#10b981",
+  };
+
+  // 1. Try Supabase insert
   const client = getSupabase();
   if (client) {
     try {
-      // 1. First attempt full payload with rich columns
       const fullPayload = {
-        name: sport.name,
-        ground_name: sport.groundName || "",
-        surface: sport.surface || "",
-        format: sport.format || "",
-        rules: sport.rules || "",
-        description: sport.description || "",
-        accent_color: sport.accentColor || "#10b981",
+        name: cleanName,
+        ground_name: localSport.groundName,
+        surface: localSport.surface,
+        format: localSport.format,
+        rules: localSport.rules,
+        description: localSport.description,
+        accent_color: localSport.accentColor,
       };
 
       const { data, error } = await client.from("sports").insert([fullPayload]).select().single();
-
-      // If error indicates a missing column in user's database schema, fallback gracefully to basic schema
-      if (error && (error.message?.includes("column") || error.code === "42703")) {
-        console.warn("Retrying sport insert with basic columns due to schema difference:", error.message);
-        const basicPayload = {
-          name: sport.name,
-          image: `${sport.name.toLowerCase().replace(/\s+/g, "")}.jpg`,
-        };
-        const retry = await client.from("sports").insert([basicPayload]).select().single();
-        if (retry.error) return { success: false, error: retry.error.message };
-        return { success: true, data: normalizeSport(retry.data) };
+      if (!error && data) {
+        const normalized = normalizeSport(data);
+        saveLocalCustomSport(normalized);
+        return { success: true, data: normalized };
       }
 
-      if (error) return { success: false, error: error.message };
-      return { success: true, data: normalizeSport(data) };
-    } catch (err: any) {
-      return { success: false, error: err.message };
+      // Try basic columns
+      const basicPayload = {
+        name: cleanName,
+        image: `${cleanName.toLowerCase().replace(/\s+/g, "")}.jpg`,
+      };
+      const retry = await client.from("sports").insert([basicPayload]).select().single();
+      if (!retry.error && retry.data) {
+        const normalized = normalizeSport(retry.data);
+        saveLocalCustomSport(normalized);
+        return { success: true, data: normalized };
+      }
+    } catch (supaErr: any) {
+      console.warn("Supabase sports insert notice, proceeding with backend & local persistence:", supaErr.message);
     }
   }
-  return { success: false, error: "Supabase connection is not configured." };
+
+  // 2. Persist to Backend API
+  try {
+    const res = await fetch("/api/sports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sport),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.data) {
+        const normalized = normalizeSport(json.data);
+        saveLocalCustomSport(normalized);
+        return { success: true, data: normalized };
+      }
+    }
+  } catch (apiErr) {
+    console.warn("Notice saving sport to backend API:", apiErr);
+  }
+
+  // 3. Persist locally
+  saveLocalCustomSport(localSport);
+  return { success: true, data: localSport };
+}
+
+// Update tournament dates (last registration deadline and kickoff date)
+export async function updateTournamentDates(
+  tournamentId: number,
+  dates: { lastRegistrationDate?: string; date?: string }
+): Promise<{ success: boolean; error?: string }> {
+  // 1. Save local override
+  saveLocalTournamentOverride(tournamentId, dates);
+
+  // 2. Update local created tournaments
+  try {
+    const localList = getLocalCreatedTournaments();
+    const match = localList.find((t) => t.id === Number(tournamentId));
+    if (match) {
+      if (dates.lastRegistrationDate) match.lastRegistrationDate = dates.lastRegistrationDate;
+      if (dates.date) match.date = dates.date;
+      saveLocalCreatedTournament(match);
+    }
+  } catch (e) {
+    console.warn("Notice updating local tournament:", e);
+  }
+
+  // 3. Persist to backend
+  try {
+    await fetch(`/api/tournaments/${tournamentId}/dates`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(dates),
+    });
+  } catch (apiErr) {
+    console.warn("Notice updating dates on server:", apiErr);
+  }
+
+  // 4. Update in Supabase tournaments table
+  const client = getSupabase();
+  if (client) {
+    try {
+      const payload: Record<string, any> = {};
+      if (dates.lastRegistrationDate) payload.last_registration_date = dates.lastRegistrationDate;
+      if (dates.date) payload.date = dates.date;
+
+      const { error } = await client.from("tournaments").update(payload).eq("id", tournamentId);
+      if (error) {
+        console.warn("Notice updating tournament dates in Supabase:", error.message);
+      }
+    } catch (supaErr: any) {
+      console.warn("Notice updating tournament dates caught error:", supaErr.message);
+    }
+  }
+
+  return { success: true };
 }
 
 /**
@@ -886,61 +1042,15 @@ export async function seedSampleDataToSupabase(): Promise<{
       console.warn("Sport seed upsert error:", sportsError);
     }
 
-    // 2. Seed Tournaments
-    console.log("[Supabase Seeder] Seeding tournaments...");
-    const tournamentRows = DEFAULT_FALLBACK_TOURNAMENTS.map((t) => ({
-      id: t.id,
-      name: t.name,
-      sport_id: t.sportId,
-      location: t.location,
-      state: t.state,
-      district: t.district,
-      ground_name: t.groundName,
-      date: t.date,
-      last_registration_date: t.lastRegistrationDate,
-      entry_fee: t.entryFee,
-      prize_amount: t.prizeAmount,
-      max_teams: t.maxTeams,
-      registered_teams: t.registeredTeams,
-      status: t.status,
-      description: t.description,
-    }));
-
-    const { error: tourneyError } = await client.from("tournaments").upsert(tournamentRows);
-    if (tourneyError) {
-      console.warn("Tournament seed upsert error:", tourneyError);
-    }
-
-    // 3. Seed Teams
-    console.log("[Supabase Seeder] Seeding teams...");
-    const sampleTeams = [
-      { id: 1, name: "Thunder Strikers FC", tournament_id: 1, group: "A", members: 11 },
-      { id: 2, name: "Hyderabad Blasters", tournament_id: 1, group: "A", members: 11 },
-      { id: 3, name: "Falcon Warriors", tournament_id: 1, group: "B", members: 11 },
-      { id: 4, name: "Titan United", tournament_id: 1, group: "B", members: 11 },
-      { id: 5, name: "Bangalore Dunkers", tournament_id: 2, group: "A", members: 5 },
-      { id: 6, name: "Metro Hoopers", tournament_id: 2, group: "A", members: 5 },
-      { id: 7, name: "Kanteerava Bulls", tournament_id: 2, group: "B", members: 5 },
-      { id: 8, name: "Silicon Shooters", tournament_id: 2, group: "B", members: 5 },
-      { id: 9, name: "Chennai Spinners", tournament_id: 3, group: "A", members: 2 },
-      { id: 10, name: "Marina Smashers", tournament_id: 3, group: "B", members: 2 },
-      { id: 11, name: "Mumbai Champions", tournament_id: 4, group: "A", members: 11 },
-      { id: 12, name: "Marine Drive Royals", tournament_id: 4, group: "B", members: 11 },
-    ];
-
-    const { error: teamsError } = await client.from("teams").upsert(sampleTeams);
-    if (teamsError) {
-      console.warn("Teams seed upsert error:", teamsError);
-    }
-
-    // Refresh sequence numbers in case postgres sequence is behind
+    // 2. Check Tournaments
+    console.log("[Supabase Seeder] Verifying sports seed...");
     return {
       success: true,
-      message: "Database seeded successfully with official sports, tournaments, and registered squads!",
+      message: "Database sports and schemas synchronized with Supabase.",
       counts: {
         sports: sportsRows.length,
-        tournaments: tournamentRows.length,
-        teams: sampleTeams.length,
+        tournaments: 0,
+        teams: 0,
       },
     };
   } catch (err: any) {

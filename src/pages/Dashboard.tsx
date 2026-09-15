@@ -115,7 +115,7 @@ const Dashboard: React.FC = () => {
   const [hasUnreadNotifs, setHasUnreadNotifs] = useState(true);
   const [roleNotice, setRoleNotice] = useState<string | null>(null);
 
-  const isSuperAdmin = user?.role === "superadmin";
+  const isSuperAdmin = user?.role === "superadmin" || user?.role === "Administrator" || user?.username === "admin123";
 
   // Protect Dashboard: only accessible when authenticated
   useEffect(() => {
@@ -176,29 +176,32 @@ const Dashboard: React.FC = () => {
   // Aggregated live calculations from Supabase
   const stats = useMemo(() => {
     const totalTourneys = tournaments.length;
-    const totalPrizeRaw = tournaments.reduce((acc, t) => acc + (t.prizeAmount || 0), 0);
+    const totalPrizeRaw = tournaments.reduce((acc, t) => acc + (Number(t.prizeAmount) || 0), 0);
+    // Exact same calculation as "Total Entry Fees" card: entryFee * registeredTeams
     const totalFeesRaw = tournaments.reduce(
-      (acc, t) => acc + (t.entryFee || 0) * (t.registeredTeams || 0),
+      (acc, t) => acc + (Number(t.entryFee) || 0) * (Number(t.registeredTeams) || 0),
       0
     );
-    const registeredTeamsSum = tournaments.reduce((acc, t) => acc + (t.registeredTeams || 0), 0);
-    const maxTeamsSum = tournaments.reduce((acc, t) => acc + (t.maxTeams || 0), 0) || 1;
+    const registeredTeamsSum = tournaments.reduce((acc, t) => acc + (Number(t.registeredTeams) || 0), 0);
+    const maxTeamsSum = tournaments.reduce((acc, t) => acc + (Number(t.maxTeams) || 0), 0) || 1;
 
     // Unique venues
     const uniqueVenues = new Set(tournaments.map((t) => t.groundName).filter(Boolean));
 
     // Prize pool allocation: (Total Entry Fees Collected / Total Prize Pool) * 100
     const prizePoolAllocationPercent =
-      totalPrizeRaw > 0 ? Math.min(100, Math.round((totalFeesRaw / totalPrizeRaw) * 100)) : 0;
+      totalPrizeRaw > 0 && !isNaN(totalFeesRaw) && !isNaN(totalPrizeRaw)
+        ? Math.min(100, Math.max(0, Math.round((totalFeesRaw / totalPrizeRaw) * 100)))
+        : 0;
 
     return {
       totalTourneys,
-      totalPrizeRaw,
-      totalFeesRaw,
-      registeredTeamsSum,
-      maxTeamsSum,
+      totalPrizeRaw: isNaN(totalPrizeRaw) ? 0 : totalPrizeRaw,
+      totalFeesRaw: isNaN(totalFeesRaw) ? 0 : totalFeesRaw,
+      registeredTeamsSum: isNaN(registeredTeamsSum) ? 0 : registeredTeamsSum,
+      maxTeamsSum: isNaN(maxTeamsSum) ? 1 : maxTeamsSum,
       capacityPercent: Math.min(100, Math.round((registeredTeamsSum / maxTeamsSum) * 100)),
-      prizePoolAllocationPercent,
+      prizePoolAllocationPercent: isNaN(prizePoolAllocationPercent) ? 0 : prizePoolAllocationPercent,
       uniqueVenuesCount: uniqueVenues.size,
     };
   }, [tournaments]);
@@ -559,115 +562,90 @@ const Dashboard: React.FC = () => {
             </ul>
           </div>
 
-          {/* SUPER ADMIN RESTRICTED SECTION */}
-          <div className="dash-nav-section" style={{ marginTop: "0.5rem" }}>
-            {!sidebarCollapsed && (
-              <div
-                className="dash-nav-heading"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  color: isSuperAdmin ? "#64748b" : "#94a3b8",
-                }}
-              >
-                <span>SUPER ADMIN</span>
-                {!isSuperAdmin && (
-                  <span style={{ fontSize: "0.65rem", background: "#f1f5f9", padding: "0.1rem 0.35rem", borderRadius: "3px" }}>
-                    LOCKED
+          {/* SUPER ADMIN RESTRICTED SECTION - ONLY RENDER IF LOGGED IN AS SUPER ADMIN */}
+          {isSuperAdmin && (
+            <div className="dash-nav-section" style={{ marginTop: "0.5rem" }} id="superadmin-only-nav-section">
+              {!sidebarCollapsed && (
+                <div
+                  className="dash-nav-heading"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    color: "#64748b",
+                  }}
+                >
+                  <span>SUPER ADMIN</span>
+                  <span style={{ fontSize: "0.65rem", background: "rgba(245, 158, 11, 0.15)", color: "#d97706", padding: "0.1rem 0.4rem", borderRadius: "4px", fontWeight: 700 }}>
+                    SUPER
                   </span>
-                )}
-              </div>
-            )}
+                </div>
+              )}
 
-            <ul className="dash-nav-list">
-              {/* User & Role Management */}
-              <li>
-                <button
-                  className={`dash-nav-item ${selectedMenu === "users" ? "active" : ""}`}
-                  onClick={() => {
-                    if (isSuperAdmin) {
+              <ul className="dash-nav-list">
+                {/* User & Role Management */}
+                <li>
+                  <button
+                    className={`dash-nav-item ${selectedMenu === "users" ? "active" : ""}`}
+                    onClick={() => {
                       setSelectedMenu("users");
                       setMobileMenuOpen(false);
                       setRoleNotice(null);
-                    } else {
-                      setRoleNotice("User Management is restricted to Super Admin accounts.");
-                      setTimeout(() => setRoleNotice(null), 4000);
-                    }
-                  }}
-                  id="admin-nav-users"
-                  style={{
-                    opacity: isSuperAdmin ? 1 : 0.45,
-                    cursor: isSuperAdmin ? "pointer" : "not-allowed",
-                  }}
-                  title={isSuperAdmin ? "Manage admin users & permissions" : "Super Admin Only"}
-                >
-                  <div className="dash-nav-left-part">
-                    <Users size={18} />
-                    {!sidebarCollapsed && <span>User Management</span>}
-                  </div>
-                  {!sidebarCollapsed && !isSuperAdmin && <Lock size={13} color="#94a3b8" />}
-                </button>
-              </li>
+                    }}
+                    id="admin-nav-users"
+                    title="Manage admin users & permissions"
+                  >
+                    <div className="dash-nav-left-part">
+                      <Users size={18} />
+                      {!sidebarCollapsed && <span>User & Role Management</span>}
+                    </div>
+                  </button>
+                </li>
 
-              {/* Audit Logs */}
-              <li>
-                <button
-                  className={`dash-nav-item ${selectedMenu === "audit" ? "active" : ""}`}
-                  onClick={() => {
-                    if (isSuperAdmin) {
+                {/* Audit Logs */}
+                <li>
+                  <button
+                    className={`dash-nav-item ${selectedMenu === "audit" ? "active" : ""}`}
+                    onClick={() => {
                       setSelectedMenu("audit");
                       setMobileMenuOpen(false);
                       setRoleNotice(null);
-                    } else {
-                      setRoleNotice("Audit Logs are restricted to Super Admin accounts.");
-                      setTimeout(() => setRoleNotice(null), 4000);
-                    }
-                  }}
-                  id="admin-nav-audit"
-                  style={{
-                    opacity: isSuperAdmin ? 1 : 0.45,
-                    cursor: isSuperAdmin ? "pointer" : "not-allowed",
-                  }}
-                  title={isSuperAdmin ? "View system security & activity logs" : "Super Admin Only"}
-                >
-                  <div className="dash-nav-left-part">
-                    <FileText size={18} />
-                    {!sidebarCollapsed && <span>Audit Logs</span>}
-                  </div>
-                  {!sidebarCollapsed && !isSuperAdmin && <Lock size={13} color="#94a3b8" />}
-                </button>
-              </li>
+                    }}
+                    id="admin-nav-audit"
+                    title="View system security & activity logs"
+                  >
+                    <div className="dash-nav-left-part">
+                      <FileText size={18} />
+                      {!sidebarCollapsed && <span>Audit Logs</span>}
+                    </div>
+                  </button>
+                </li>
 
-              {/* System Settings & Telemetry */}
-              <li>
-                <button
-                  className={`dash-nav-item ${selectedMenu === "settings" ? "active" : ""}`}
-                  onClick={() => {
-                    if (isSuperAdmin) {
+                {/* System Settings & Telemetry */}
+                <li>
+                  <button
+                    className={`dash-nav-item ${selectedMenu === "settings" ? "active" : ""}`}
+                    onClick={() => {
                       setSelectedMenu("settings");
                       setMobileMenuOpen(false);
                       setRoleNotice(null);
-                    } else {
-                      setRoleNotice("Full system settings are restricted to Super Admin accounts.");
-                      setTimeout(() => setRoleNotice(null), 4000);
-                    }
-                  }}
-                  id="admin-nav-settings"
-                  style={{
-                    opacity: isSuperAdmin ? 1 : 0.45,
-                    cursor: isSuperAdmin ? "pointer" : "not-allowed",
-                  }}
-                  title={isSuperAdmin ? "Database and system settings" : "Super Admin Only"}
-                >
-                  <div className="dash-nav-left-part">
-                    <Settings size={18} />
-                    {!sidebarCollapsed && <span>System Settings</span>}
-                  </div>
-                  {!sidebarCollapsed && !isSuperAdmin && <Lock size={13} color="#94a3b8" />}
-                </button>
-              </li>
+                    }}
+                    id="admin-nav-settings"
+                    title="Database and system settings"
+                  >
+                    <div className="dash-nav-left-part">
+                      <Settings size={18} />
+                      {!sidebarCollapsed && <span>System Settings</span>}
+                    </div>
+                  </button>
+                </li>
+              </ul>
+            </div>
+          )}
 
+          {/* Logout Section */}
+          <div className="dash-nav-section" style={{ marginTop: "auto", paddingTop: "0.75rem", borderTop: "1px solid #f1f5f9" }}>
+            <ul className="dash-nav-list">
               <li>
                 <button
                   className="dash-nav-item"
@@ -717,25 +695,6 @@ const Dashboard: React.FC = () => {
             </div>
 
             <div className="dash-header-actions">
-              {/* Role Indicator Badge */}
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  background: user?.role === "superadmin" ? "rgba(245, 158, 11, 0.12)" : "rgba(16, 185, 129, 0.12)",
-                  border: `1px solid ${user?.role === "superadmin" ? "rgba(245, 158, 11, 0.35)" : "rgba(16, 185, 129, 0.35)"}`,
-                  color: user?.role === "superadmin" ? "#d97706" : "#059669",
-                  padding: "0.45rem 0.8rem",
-                  borderRadius: "8px",
-                  fontSize: "0.8rem",
-                  fontWeight: 700,
-                }}
-                id="header-user-role-badge"
-              >
-                <span>{user?.role === "superadmin" ? "👑 Super Admin" : "🛡️ Admin"}</span>
-              </div>
-
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="admin-btn-primary"
@@ -936,37 +895,40 @@ const Dashboard: React.FC = () => {
               <div
                 className="dash-user-profile"
                 id="right-corner-admin-profile"
-                style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.6rem" }}
+                style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.65rem" }}
                 onClick={() => setSelectedMenu("profile")}
                 title="View Admin Profile & Permissions"
               >
                 <div
                   className="dash-avatar"
                   style={{
-                    background: user?.role === "superadmin" ? "#f59e0b" : "#059669",
+                    background: isSuperAdmin ? "#f59e0b" : "#059669",
                   }}
                 >
                   <span>{user?.username?.charAt(0).toUpperCase() || "A"}</span>
                 </div>
-                <div className="dash-user-meta" style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                  <span className="dash-user-name">{user?.name || user?.username || "admin"}</span>
+                <div className="dash-user-meta" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span className="dash-user-name" style={{ fontWeight: 700 }}>
+                    {user?.name || user?.username || "admin"}
+                  </span>
                   {/* Role indicator badge next to user avatar */}
                   <span
                     id="user-role-indicator-badge"
                     style={{
                       display: "inline-flex",
                       alignItems: "center",
-                      gap: "3px",
-                      fontSize: "0.72rem",
-                      fontWeight: 800,
-                      padding: "0.1rem 0.5rem",
+                      gap: "4px",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      padding: "0.15rem 0.6rem",
                       borderRadius: "9999px",
                       background: isSuperAdmin ? "rgba(245, 158, 11, 0.15)" : "rgba(16, 185, 129, 0.15)",
                       color: isSuperAdmin ? "#b45309" : "#065f46",
                       border: `1px solid ${isSuperAdmin ? "rgba(245, 158, 11, 0.4)" : "rgba(16, 185, 129, 0.4)"}`,
+                      whiteSpace: "nowrap",
                     }}
                   >
-                    {isSuperAdmin ? "Super Admin" : "Admin"}
+                    {isSuperAdmin ? "👑 Super Admin" : "🛡️ Admin"}
                   </span>
                 </div>
               </div>
@@ -1173,15 +1135,15 @@ const Dashboard: React.FC = () => {
                         <span
                           style={{
                             display: "inline-block",
-                            background: user?.role === "superadmin" ? "#fef3c7" : "#d1fae5",
-                            color: user?.role === "superadmin" ? "#b45309" : "#065f46",
+                            background: isSuperAdmin ? "#fef3c7" : "#d1fae5",
+                            color: isSuperAdmin ? "#b45309" : "#065f46",
                             padding: "0.25rem 0.75rem",
                             borderRadius: "6px",
                             fontSize: "0.82rem",
                             fontWeight: 800,
                           }}
                         >
-                          {user?.role === "superadmin" ? "👑 SUPERADMIN" : "🛡️ ADMIN"}
+                          {isSuperAdmin ? "👑 SUPERADMIN" : "🛡️ ADMIN"}
                         </span>
                       </div>
                     </div>
@@ -1726,7 +1688,7 @@ const Dashboard: React.FC = () => {
                 </div>
 
                 {/* Goal 2: Prize Pool Allocation */}
-                <div className="dash-goal-item">
+                <div className="dash-goal-item" id="dash-goal-prize-allocation">
                   <div className="dash-goal-header">
                     <div className="dash-goal-title-group">
                       <div className="dash-goal-icon-circle" style={{ background: "#fef3c7", color: "#d97706" }}>
@@ -1734,18 +1696,18 @@ const Dashboard: React.FC = () => {
                       </div>
                       <span className="dash-goal-name">Prize Pool Allocation</span>
                     </div>
-                    <span className="dash-goal-percent">
-                      {stats.prizePoolAllocationPercent}%
+                    <span className="dash-goal-percent" id="prize-pool-allocation-percent">
+                      {isNaN(stats.prizePoolAllocationPercent) ? 0 : stats.prizePoolAllocationPercent}%
                     </span>
                   </div>
                   <div className="dash-goal-numbers">
-                    {formatMoney(stats.totalFeesRaw)} / {formatMoney(stats.totalPrizeRaw)} Collected
+                    {formatMoney(stats.totalFeesRaw || 0)} / {formatMoney(stats.totalPrizeRaw || 0)} Collected
                   </div>
                   <div className="dash-progress-track">
                     <div
                       className="dash-progress-fill"
                       style={{
-                        width: `${Math.min(100, stats.prizePoolAllocationPercent)}%`,
+                        width: `${Math.min(100, Math.max(0, stats.prizePoolAllocationPercent || 0))}%`,
                         background: "#d97706",
                       }}
                     />
@@ -1917,157 +1879,17 @@ const Dashboard: React.FC = () => {
     </main>
   </div>
 
-  {/* Supabase Connected Create Tournament Modal */}
-  {showCreateModal && (
-    <AdminCreateTournamentModal
-      sports={sports}
-      onClose={() => setShowCreateModal(false)}
-      onSuccess={() => {
-        fetchSupabaseData();
-      }}
-    />
-  )}
-
-  {/* Active Session & Role JSON Inspection Modal */}
-  {showSessionModal && (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(15, 23, 42, 0.75)",
-        backdropFilter: "blur(4px)",
-        zIndex: 9999,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "1rem",
-      }}
-      onClick={() => setShowSessionModal(false)}
-    >
-      <div
-        style={{
-          background: "#ffffff",
-          borderRadius: "16px",
-          maxWidth: "580px",
-          width: "100%",
-          padding: "1.75rem",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.35)",
-          border: "1px solid #e2e8f0",
+    {/* Supabase Connected Create Tournament Modal */}
+    {showCreateModal && (
+      <AdminCreateTournamentModal
+        sports={sports}
+        onClose={() => setShowCreateModal(false)}
+        onSuccess={() => {
+          fetchSupabaseData();
         }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <Code size={20} color="#059669" />
-            <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800, color: "#0f172a" }}>
-              Authentication & Role Session JSON
-            </h3>
-          </div>
-          <button
-            onClick={() => setShowSessionModal(false)}
-            style={{
-              background: "#f1f5f9",
-              border: "none",
-              borderRadius: "8px",
-              padding: "0.4rem",
-              cursor: "pointer",
-            }}
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        <p style={{ margin: "0 0 1rem 0", fontSize: "0.85rem", color: "#64748b" }}>
-          Live authenticated JSON payload stored in the session. Tournament creators are assigned the <strong>admin</strong> role, while root platform administrators possess the <strong>superadmin</strong> flag.
-        </p>
-
-        <div
-          style={{
-            background: "#0f172a",
-            color: "#38bdf8",
-            padding: "1rem",
-            borderRadius: "10px",
-            fontFamily: "monospace",
-            fontSize: "0.82rem",
-            overflowX: "auto",
-            maxHeight: "320px",
-          }}
-        >
-          <pre style={{ margin: 0 }}>
-            {JSON.stringify(
-              {
-                status: "authenticated",
-                user: {
-                  id: user?.id || "usr_" + (user?.username || "admin"),
-                  username: user?.username || "admin",
-                  name: user?.name || user?.username || "Tournament Admin",
-                  email: user?.email || `${user?.username || "admin"}@sportsnest.app`,
-                  role: user?.role || "admin",
-                  isSuperAdmin: user?.role === "superadmin",
-                  systemScope: user?.role === "superadmin" ? "PLATFORM_ROOT" : "TOURNAMENT_ORGANIZER",
-                  permissions:
-                    user?.role === "superadmin"
-                      ? ["*"]
-                      : [
-                          "tournaments:create",
-                          "tournaments:update",
-                          "teams:register",
-                          "brackets:generate",
-                          "scores:record",
-                        ],
-                },
-                session: {
-                  tokenType: "Bearer",
-                  token: localStorage.getItem("sportsnest_auth_token") || "jwt_demo_token_sportsnest_admin",
-                  storedKey: "sportsnest_auth_user",
-                  databaseBackend: "Supabase PostgreSQL",
-                },
-              },
-              null,
-              2
-            )}
-          </pre>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "1.25rem" }}>
-          <button
-            onClick={() => {
-              const jsonStr = JSON.stringify(
-                {
-                  status: "authenticated",
-                  user: {
-                    username: user?.username || "admin",
-                    name: user?.name || "Tournament Admin",
-                    role: user?.role || "admin",
-                    isSuperAdmin: user?.role === "superadmin",
-                  },
-                  token: localStorage.getItem("sportsnest_auth_token"),
-                },
-                null,
-                2
-              );
-              navigator.clipboard.writeText(jsonStr);
-              setCopiedJson(true);
-              setTimeout(() => setCopiedJson(false), 2000);
-            }}
-            className="admin-btn-secondary"
-            style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
-          >
-            {copiedJson ? <Check size={14} color="#059669" /> : <Copy size={14} />}
-            <span>{copiedJson ? "Copied JSON!" : "Copy JSON"}</span>
-          </button>
-
-          <button
-            onClick={() => setShowSessionModal(false)}
-            className="admin-btn-primary"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  )}
-</div>
+      />
+    )}
+  </div>
   );
 };
 

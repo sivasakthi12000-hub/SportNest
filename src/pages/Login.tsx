@@ -44,9 +44,15 @@ const Login: React.FC = () => {
     }
   };
 
-  const handleFillDemo = () => {
+  const handleFillSuperAdmin = () => {
     setUsername("admin123");
     setPassword("admin123");
+    setError("");
+  };
+
+  const handleFillOrganizer = () => {
+    setUsername("sakthi01");
+    setPassword("Sakthi@53");
     setError("");
   };
 
@@ -81,7 +87,7 @@ const Login: React.FC = () => {
                   setUsername(e.target.value);
                   setError("");
                 }}
-                placeholder="admin123"
+                placeholder="sakthi01 or admin123"
                 className="auth-input"
               />
             </div>
@@ -101,7 +107,7 @@ const Login: React.FC = () => {
                   setPassword(e.target.value);
                   setError("");
                 }}
-                placeholder="admin123"
+                placeholder="Enter password"
                 className="auth-input"
               />
               <button
@@ -127,13 +133,26 @@ const Login: React.FC = () => {
         </form>
 
         <div className="demo-credentials-box">
-          <div className="demo-credentials-header">Required Credentials</div>
-          <div className="demo-credentials-values">
-            <strong>userName:</strong> admin123 &nbsp;|&nbsp; <strong>password:</strong> admin123
+          <div className="demo-credentials-header">Available Credentials</div>
+          <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: "0.5rem" }}>
+            Log in with your Tournament Organizer account or Super Admin:
           </div>
-          <div>
-            <button type="button" onClick={handleFillDemo} className="demo-autofill-btn">
-              ⚡ Fill Admin Credentials
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={handleFillOrganizer}
+              className="demo-autofill-btn"
+              style={{ flex: 1, minWidth: "140px" }}
+            >
+              ⚡ Organizer: sakthi01
+            </button>
+            <button
+              type="button"
+              onClick={handleFillSuperAdmin}
+              className="demo-autofill-btn"
+              style={{ flex: 1, minWidth: "140px", background: "rgba(255,255,255,0.06)", borderColor: "rgba(255,255,255,0.15)" }}
+            >
+              🛡️ Super Admin: admin123
             </button>
           </div>
         </div>

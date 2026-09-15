@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { MapPin, Trophy, Users, Calendar, ArrowRight, Shield, DollarSign } from "lucide-react";
+import { MapPin, Trophy, Users, Calendar, ArrowRight, Shield, DollarSign, Clock, AlertCircle } from "lucide-react";
 import { getTournamentVisual } from "../utils/visualTheme";
 import "../styles/tournament.css";
 
@@ -54,10 +54,46 @@ const TournamentCard = ({ tournament, sportName }) => {
 
   const maxTeams = Number(t.maxTeams ?? t.max_teams ?? 16);
   const registeredTeams = Number(t.registeredTeams ?? t.registered_teams ?? 0);
+  const isFull = t.status === "full" || registeredTeams >= maxTeams;
+  const slotsRemaining = Math.max(0, maxTeams - registeredTeams);
+  const isLowSlots = !isFull && slotsRemaining > 0 && (slotsRemaining <= 4 || slotsRemaining <= Math.ceil(maxTeams * 0.25));
   const fillPercent = Math.min(100, Math.round((registeredTeams / Math.max(1, maxTeams)) * 100));
   const prizeAmount = Number(t.prizeAmount ?? t.prize_amount ?? 0);
   const entryFee = Number(t.entryFee ?? t.entry_fee ?? 0);
   const locationText = [t.groundName || t.ground_name, t.location, t.state].filter(Boolean).join(" • ");
+
+  const lastRegDateStr = t.lastRegistrationDate || t.last_registration_date || "";
+
+  // Live timer calculation
+  const calculateTimeLeft = (dateStr) => {
+    if (!dateStr) return null;
+    const target = new Date(dateStr);
+    if (!dateStr.includes("T")) {
+      target.setHours(23, 59, 59, 999);
+    }
+    const diff = target.getTime() - Date.now();
+    if (diff <= 0) return { expired: true, days: 0, hours: 0, minutes: 0, seconds: 0 };
+    return {
+      expired: false,
+      days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+      hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+      minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+      seconds: Math.floor((diff % (1000 * 60)) / 1000),
+    };
+  };
+
+  const [timeLeft, setTimeLeft] = useState(() => calculateTimeLeft(lastRegDateStr));
+
+  useEffect(() => {
+    // If Maximum Teams Allowed is full, do not run or show timer
+    if (isFull || !lastRegDateStr) return;
+
+    const interval = setInterval(() => {
+      setTimeLeft(calculateTimeLeft(lastRegDateStr));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isFull, lastRegDateStr]);
 
   return (
     <div className={`tournament-image-card ${statusClass}`}>
@@ -255,10 +291,101 @@ const TournamentCard = ({ tournament, sportName }) => {
           </div>
         </div>
 
+        {/* Registration Timer / Full Capacity Status */}
+        {isFull ? (
+          /* When Maximum Teams Allowed is full: strictly DO NOT show timer */
+          <div
+            className="reg-timer-banner reg-timer-full"
+            style={{
+              marginTop: "0.75rem",
+              padding: "0.55rem 0.8rem",
+              borderRadius: "8px",
+              background: "rgba(239, 68, 68, 0.08)",
+              border: "1px solid rgba(239, 68, 68, 0.25)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "0.5rem",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
+              <span style={{ fontSize: "0.95rem" }}>🚫</span>
+              <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#dc2626" }}>
+                Tournament Full (0 Slots Left)
+              </span>
+            </div>
+            <span style={{ fontSize: "0.72rem", color: "#ef4444", fontWeight: 600 }}>
+              Max {maxTeams} Teams Reached
+            </span>
+          </div>
+        ) : (
+          /* When slots are still available: show Last Registration Date and live Timer */
+          <div
+            className={`reg-timer-banner ${isLowSlots ? "reg-timer-urgent" : "reg-timer-active"}`}
+            style={{
+              marginTop: "0.75rem",
+              padding: "0.55rem 0.8rem",
+              borderRadius: "8px",
+              background: isLowSlots ? "rgba(245, 158, 11, 0.08)" : "rgba(37, 99, 235, 0.06)",
+              border: `1px solid ${isLowSlots ? "rgba(245, 158, 11, 0.3)" : "rgba(37, 99, 235, 0.2)"}`,
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.35rem",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.3rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <Clock size={13} color={isLowSlots ? "#d97706" : "#2563eb"} />
+                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: isLowSlots ? "#b45309" : "#1d4ed8" }}>
+                  Last Date: {lastRegDateStr || "Open"}
+                </span>
+              </div>
+              {isLowSlots && (
+                <span
+                  style={{
+                    fontSize: "0.68rem",
+                    fontWeight: 700,
+                    color: "#b45309",
+                    background: "rgba(245, 158, 11, 0.2)",
+                    padding: "0.1rem 0.4rem",
+                    borderRadius: "4px",
+                  }}
+                >
+                  ⚡ Only {slotsRemaining} {slotsRemaining === 1 ? "Slot" : "Slots"} Left!
+                </span>
+              )}
+            </div>
+
+            {timeLeft && !timeLeft.expired ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.76rem" }}>
+                <span style={{ color: "#64748b", fontWeight: 500 }}>Closes in:</span>
+                <span style={{ fontWeight: 700, color: isLowSlots ? "#d97706" : "#0f172a", letterSpacing: "0.02em" }}>
+                  {timeLeft.days > 0 ? `${timeLeft.days}d ` : ""}
+                  {String(timeLeft.hours).padStart(2, "0")}h {String(timeLeft.minutes).padStart(2, "0")}m {String(timeLeft.seconds).padStart(2, "0")}s
+                </span>
+              </div>
+            ) : timeLeft && timeLeft.expired ? (
+              <span style={{ fontSize: "0.74rem", fontWeight: 600, color: "#94a3b8" }}>
+                Registration deadline passed
+              </span>
+            ) : (
+              <span style={{ fontSize: "0.74rem", color: "#64748b" }}>
+                Registration Open • {slotsRemaining} slots remaining
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Action Link */}
         <div className="card-action-row">
           <Link to={`/tournament/${t.id}`} className="btn-tournament-action">
-            <span>View Tournament & Register</span>
+            <span>
+              {isFull
+                ? "View Tournament (Full)"
+                : timeLeft && timeLeft.expired
+                ? "View Tournament (Closed)"
+                : `View & Register (${slotsRemaining} Left)`}
+            </span>
             <ArrowRight size={15} />
           </Link>
         </div>

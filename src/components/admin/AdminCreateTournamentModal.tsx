@@ -118,11 +118,10 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
   };
 
   return (
-    <div className="admin-modal-backdrop" onClick={onClose}>
+    <div className="admin-modal-backdrop">
       <div
         className="admin-modal-card"
         style={{ maxWidth: "680px", maxHeight: "90vh", overflowY: "auto" }}
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="admin-modal-header">
           <div>

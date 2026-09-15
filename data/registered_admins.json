@@ -1,0 +1,51 @@
+{
+  "admins": {
+    "admin123": {
+      "password": "admin123",
+      "name": "Sivasakthi (Owner)",
+      "email": "sivasakthi12000@gmail.com",
+      "role": "superadmin",
+      "status": "active"
+    },
+    "sakthi01": {
+      "password": "Sakthi@53",
+      "name": "sakthi01 (Tournament Organizer)",
+      "email": "sakthi01@sportsnest.app",
+      "role": "admin",
+      "status": "active"
+    },
+    "organizer_test": {
+      "password": "TestPassword123!",
+      "name": "Test Organizer",
+      "email": "test@sportsnest.app",
+      "role": "admin",
+      "status": "active"
+    }
+  },
+  "organizers": [
+    {
+      "username": "admin123",
+      "name": "Sivasakthi (Super Admin)",
+      "email": "sivasakthi12000@gmail.com",
+      "role": "superadmin",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "tournamentCount": 50
+    },
+    {
+      "username": "sakthi01",
+      "name": "sakthi01 (Tournament Organizer)",
+      "email": "sakthi01@sportsnest.app",
+      "role": "admin",
+      "createdAt": "2026-09-15T00:00:00.000Z",
+      "tournamentCount": 1
+    },
+    {
+      "username": "organizer_test",
+      "name": "Test Organizer",
+      "email": "test@sportsnest.app",
+      "role": "admin",
+      "createdAt": "2026-09-15T11:10:30.650Z",
+      "tournamentCount": 1
+    }
+  ]
+}
