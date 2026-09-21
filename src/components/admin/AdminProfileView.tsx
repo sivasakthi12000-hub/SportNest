@@ -6,22 +6,18 @@ import {
   Mail,
   Calendar,
   Clock,
-  Code,
   CheckCircle2,
   Lock,
-  Copy,
-  Check,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
 export const AdminProfileView: React.FC = () => {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const [displayName, setDisplayName] = useState(user?.name || user?.username || "Admin");
   const [email, setEmail] = useState(user?.email || "admin@sportsnest.org");
   const [password, setPassword] = useState("");
   const [saved, setSaved] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [showJson, setShowJson] = useState(false);
+  const [showSessionDetails, setShowSessionDetails] = useState(false);
 
   const isSuper = user?.role === "superadmin";
 
@@ -31,22 +27,15 @@ export const AdminProfileView: React.FC = () => {
     setTimeout(() => setSaved(false), 3000);
   };
 
-  const sessionJson = JSON.stringify(
-    {
-      sessionUser: user,
-      authToken: token,
-      activeSince: "2026-09-11T00:00:00.000Z",
-      clientOrigin: window.location.origin,
-      scopes: isSuper ? ["ALL_ACCESS", "USER_MANAGEMENT", "AUDIT_LOG", "MUTATIONS"] : ["TOURNAMENTS_READ_WRITE", "APPROVALS", "TEAMS"],
-    },
-    null,
-    2
-  );
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(sessionJson);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const safeSessionMetadata = {
+    username: user?.username || "admin",
+    role: user?.role || "admin",
+    email: user?.email || `${user?.username}@sportsnest.org`,
+    securityStatus: "Active & Encrypted (TLS/SSL)",
+    origin: window.location.origin,
+    scopes: isSuper
+      ? ["ALL_ACCESS", "USER_MANAGEMENT", "AUDIT_LOG", "MUTATIONS"]
+      : ["TOURNAMENTS_READ_WRITE", "APPROVALS", "TEAMS"],
   };
 
   return (
@@ -135,46 +124,45 @@ export const AdminProfileView: React.FC = () => {
 
             <div>
               <label style={{ fontSize: "0.78rem", color: "#64748b", fontWeight: 700, textTransform: "uppercase" }}>
-                Authentication Bearer Token
+                Session & Authentication Security
               </label>
               <div
                 style={{
-                  background: "#f8fafc",
-                  padding: "0.5rem 0.75rem",
-                  borderRadius: "6px",
-                  fontSize: "0.75rem",
-                  fontFamily: "monospace",
-                  color: "#475569",
-                  wordBreak: "break-all",
-                  border: "1px solid #e2e8f0",
-                  marginTop: "0.25rem",
+                  background: "#f0fdf4",
+                  padding: "0.75rem 0.85rem",
+                  borderRadius: "8px",
+                  fontSize: "0.82rem",
+                  color: "#166534",
+                  border: "1px solid #bbf7d0",
+                  marginTop: "0.35rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.3rem",
                 }}
               >
-                {token ? `${token.substring(0, 32)}...` : "Active Server In-Memory Token"}
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontWeight: 700 }}>
+                  <Lock size={15} color="#15803d" />
+                  <span>Encrypted Bearer Session Active</span>
+                </div>
+                <div style={{ fontSize: "0.75rem", color: "#15803d", lineHeight: 1.4 }}>
+                  Authentication tokens are securely signed and isolated in HTTP transmission headers. Raw credential strings are shielded to protect administrative access.
+                </div>
               </div>
             </div>
 
             <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
               <button
-                onClick={() => setShowJson(!showJson)}
+                type="button"
+                onClick={() => setShowSessionDetails(!showSessionDetails)}
                 className="admin-btn-secondary"
                 style={{ fontSize: "0.82rem", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
               >
-                <Code size={14} />
-                <span>{showJson ? "Hide Token JSON" : "Inspect Token JSON"}</span>
-              </button>
-
-              <button
-                onClick={handleCopy}
-                className="admin-btn-secondary"
-                style={{ fontSize: "0.82rem", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
-              >
-                {copied ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
-                <span>{copied ? "Copied" : "Copy Session"}</span>
+                <Shield size={14} color="#059669" />
+                <span>{showSessionDetails ? "Hide Session Info" : "View Session Metadata"}</span>
               </button>
             </div>
 
-            {showJson && (
+            {showSessionDetails && (
               <pre
                 style={{
                   background: "#0f172a",
@@ -186,7 +174,7 @@ export const AdminProfileView: React.FC = () => {
                   marginTop: "0.75rem",
                 }}
               >
-                {sessionJson}
+                {JSON.stringify(safeSessionMetadata, null, 2)}
               </pre>
             )}
           </div>

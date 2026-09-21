@@ -337,12 +337,42 @@ export function getLocalCustomSports(): Sport[] {
   }
 }
 
+const DELETED_SPORTS_KEY = "sportsnest_deleted_sports";
+
+export function getLocalDeletedSports(): string[] {
+  try {
+    const raw = localStorage.getItem(DELETED_SPORTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addLocalDeletedSport(target: string | number) {
+  try {
+    const list = getLocalDeletedSports();
+    const str = String(target).toLowerCase();
+    if (!list.includes(str)) {
+      list.push(str);
+      localStorage.setItem(DELETED_SPORTS_KEY, JSON.stringify(list));
+    }
+  } catch (e) {
+    console.warn("Notice saving deleted sport to localStorage:", e);
+  }
+}
+
 export function saveLocalCustomSport(sport: Sport) {
   try {
     const current = getLocalCustomSports();
     const filtered = current.filter((s) => s.id !== sport.id && s.name.toLowerCase() !== sport.name.toLowerCase());
     filtered.push(sport);
     localStorage.setItem(CUSTOM_SPORTS_KEY, JSON.stringify(filtered));
+
+    // Also remove from deleted tombstones if previously deleted
+    const deleted = getLocalDeletedSports().filter(
+      (d) => d !== String(sport.id) && d !== sport.name.toLowerCase()
+    );
+    localStorage.setItem(DELETED_SPORTS_KEY, JSON.stringify(deleted));
   } catch (e) {
     console.warn("Notice saving custom sport to localStorage:", e);
   }
@@ -395,9 +425,12 @@ export async function getSports(): Promise<Sport[]> {
     baseSports = [...DEFAULT_FALLBACK_SPORTS];
   }
 
-  // Load custom sports from backend server & localStorage
+  // Load custom sports and deleted tombstones from backend server & localStorage
   const localCustom = getLocalCustomSports();
+  const localDeleted = getLocalDeletedSports();
   let serverCustom: Sport[] = [];
+  let serverDeleted: string[] = [];
+
   try {
     const resp = await fetch("/api/sports");
     if (resp.ok) {
@@ -405,10 +438,17 @@ export async function getSports(): Promise<Sport[]> {
       if (json.success && Array.isArray(json.sports)) {
         serverCustom = json.sports.map(normalizeSport);
       }
+      if (json.success && Array.isArray(json.deleted)) {
+        serverDeleted = json.deleted;
+      }
     }
   } catch {
     // Network or server starting
   }
+
+  const allDeletedSet = new Set(
+    [...localDeleted, ...serverDeleted].map((d) => String(d).toLowerCase())
+  );
 
   // Merge sports uniquely by name and id
   const sportsMap = new Map<string, Sport>();
@@ -416,7 +456,14 @@ export async function getSports(): Promise<Sport[]> {
   localCustom.forEach((s) => sportsMap.set(s.name.toLowerCase(), s));
   serverCustom.forEach((s) => sportsMap.set(s.name.toLowerCase(), s));
 
-  return Array.from(sportsMap.values()).sort((a, b) => a.id - b.id);
+  // Filter out any explicitly deleted sports
+  const activeSports = Array.from(sportsMap.values()).filter((s) => {
+    const idMatch = allDeletedSet.has(String(s.id));
+    const nameMatch = allDeletedSet.has(s.name.toLowerCase());
+    return !idMatch && !nameMatch;
+  });
+
+  return activeSports.sort((a, b) => a.id - b.id);
 }
 
 // Local store for user-created tournaments to guarantee instant preview and responsiveness
@@ -959,6 +1006,121 @@ export async function createSport(sport: {
   // 3. Persist locally
   saveLocalCustomSport(localSport);
   return { success: true, data: localSport };
+}
+
+// Delete sport from directory (backend, localStorage, and Supabase)
+export async function deleteSport(
+  id: number | string,
+  name: string
+): Promise<{ success: boolean; error?: string }> {
+  // 1. Mark as deleted locally
+  addLocalDeletedSport(id);
+  if (name) addLocalDeletedSport(name);
+
+  try {
+    const localList = getLocalCustomSports();
+    const updated = localList.filter(
+      (s) => String(s.id) !== String(id) && s.name.toLowerCase() !== name.toLowerCase()
+    );
+    localStorage.setItem(CUSTOM_SPORTS_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.warn("Notice updating custom sports local cache:", e);
+  }
+
+  // 2. Call backend DELETE API
+  try {
+    await fetch(`/api/sports/${id}?name=${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    });
+  } catch (apiErr) {
+    console.warn("Notice deleting sport on backend API:", apiErr);
+  }
+
+  // 3. Delete from Supabase if connected
+  const client = getSupabase();
+  if (client) {
+    try {
+      if (typeof id === "number" && id < 1000) {
+        await client.from("sports").delete().eq("id", id);
+      }
+      if (name) {
+        await client.from("sports").delete().eq("name", name);
+      }
+    } catch (supaErr: any) {
+      console.warn("Supabase sport deletion notice:", supaErr?.message || supaErr);
+    }
+  }
+
+  return { success: true };
+}
+
+// Update existing sport details
+export async function updateSport(
+  id: number | string,
+  updates: Partial<Sport>
+): Promise<{ success: boolean; data?: Sport; error?: string }> {
+  // 1. Update localStorage
+  try {
+    const localList = getLocalCustomSports();
+    const existingIndex = localList.findIndex(
+      (s) => String(s.id) === String(id) || (updates.name && s.name.toLowerCase() === updates.name.toLowerCase())
+    );
+    if (existingIndex >= 0) {
+      localList[existingIndex] = { ...localList[existingIndex], ...updates };
+      localStorage.setItem(CUSTOM_SPORTS_KEY, JSON.stringify(localList));
+    } else if (updates.name) {
+      saveLocalCustomSport({
+        id: Number(id) || Date.now() % 100000,
+        name: updates.name,
+        groundName: updates.groundName,
+        surface: updates.surface,
+        format: updates.format,
+        rules: updates.rules,
+        description: updates.description,
+        accentColor: updates.accentColor || "#10b981",
+        image: `${updates.name.toLowerCase().replace(/\s+/g, "")}.jpg`,
+      });
+    }
+  } catch (e) {
+    console.warn("Notice updating sport in local storage:", e);
+  }
+
+  // 2. Persist to backend API
+  try {
+    const res = await fetch(`/api/sports/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.data) {
+        return { success: true, data: normalizeSport(json.data) };
+      }
+    }
+  } catch (apiErr) {
+    console.warn("Notice patching sport on backend:", apiErr);
+  }
+
+  // 3. Update Supabase if connected
+  const client = getSupabase();
+  if (client) {
+    try {
+      const payload: any = {};
+      if (updates.groundName !== undefined) payload.ground_name = updates.groundName;
+      if (updates.surface !== undefined) payload.surface = updates.surface;
+      if (updates.format !== undefined) payload.format = updates.format;
+      if (updates.rules !== undefined) payload.rules = updates.rules;
+      if (updates.description !== undefined) payload.description = updates.description;
+      if (updates.accentColor !== undefined) payload.accent_color = updates.accentColor;
+
+      await client.from("sports").update(payload).eq("id", id);
+    } catch (supaErr: any) {
+      console.warn("Supabase sport update notice:", supaErr?.message || supaErr);
+    }
+  }
+
+  return { success: true };
 }
 
 // Update tournament dates (last registration deadline and kickoff date)

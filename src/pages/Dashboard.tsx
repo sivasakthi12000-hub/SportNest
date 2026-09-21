@@ -109,6 +109,7 @@ const Dashboard: React.FC = () => {
   const [selectedMenu, setSelectedMenu] = useState("dashboard");
   const [activeBarIndex, setActiveBarIndex] = useState<number>(7);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [preselectedSportName, setPreselectedSportName] = useState<string>("");
   const [teamTournamentFilter, setTeamTournamentFilter] = useState<number | null>(null);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(4);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -283,6 +284,10 @@ const Dashboard: React.FC = () => {
     });
     return assigned.length > 0 ? assigned : tournaments.slice(0, 4);
   }, [isSuperAdmin, tournaments, user]);
+
+  const relevantSportIds = useMemo(() => {
+    return new Set(visibleTournaments.map((t) => t.sportId).filter(Boolean));
+  }, [visibleTournaments]);
 
   // Filtered recent tournaments supporting all statuses: upcoming, live, pending_approval, disputed, completed
   const filteredTournaments = useMemo(() => {
@@ -1078,7 +1083,17 @@ const Dashboard: React.FC = () => {
           {selectedMenu === "sports" && (
             <AdminSportsView
               sports={sports}
+              tournaments={tournaments}
               onRefresh={fetchSupabaseData}
+              userRole={user?.role}
+              relevantSportIds={relevantSportIds}
+              onOpenCreateTournament={(sportName) => {
+                setPreselectedSportName(sportName || "");
+                setShowCreateModal(true);
+              }}
+              onViewTournament={() => {
+                setSelectedMenu("tournaments");
+              }}
             />
           )}
 
@@ -1883,9 +1898,15 @@ const Dashboard: React.FC = () => {
     {showCreateModal && (
       <AdminCreateTournamentModal
         sports={sports}
-        onClose={() => setShowCreateModal(false)}
+        defaultSportName={preselectedSportName}
+        onClose={() => {
+          setShowCreateModal(false);
+          setPreselectedSportName("");
+        }}
         onSuccess={() => {
           fetchSupabaseData();
+          setShowCreateModal(false);
+          setPreselectedSportName("");
         }}
       />
     )}

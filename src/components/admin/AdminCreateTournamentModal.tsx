@@ -8,20 +8,30 @@ interface AdminCreateTournamentModalProps {
   sports: Sport[];
   onClose: () => void;
   onSuccess: () => void;
+  defaultSportId?: number;
+  defaultSportName?: string;
 }
 
 export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProps> = ({
   sports,
   onClose,
   onSuccess,
+  defaultSportId,
+  defaultSportName,
 }) => {
   const { user } = useAuth();
+  const matchedSport = defaultSportId
+    ? sports.find((s) => s.id === defaultSportId)
+    : defaultSportName
+    ? sports.find((s) => s.name.toLowerCase() === defaultSportName.toLowerCase())
+    : sports[0];
+
   const [name, setName] = useState("");
-  const [sportId, setSportId] = useState<number>(sports[0]?.id || 1);
+  const [sportId, setSportId] = useState<number>(matchedSport?.id || sports[0]?.id || 1);
   const [location, setLocation] = useState("Hyderabad");
   const [address, setAddress] = useState("");
   const [pincode, setPincode] = useState("");
-  const [groundName, setGroundName] = useState("");
+  const [groundName, setGroundName] = useState(matchedSport?.groundName || "");
   const [mapUrl, setMapUrl] = useState("");
   const [state, setState] = useState("Telangana");
   const [district, setDistrict] = useState("Hyderabad");

@@ -1809,6 +1809,49 @@
   .admin-form-row {
     grid-template-columns: 1fr;
   }
+
+  .admin-view-header {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 0.85rem !important;
+  }
+
+  .admin-view-actions {
+    width: 100% !important;
+    justify-content: flex-start;
+  }
+
+  .admin-search-input {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+
+  .admin-modal-card {
+    max-height: 92vh !important;
+    border-radius: 16px !important;
+    width: calc(100vw - 20px) !important;
+    margin: auto;
+  }
+
+  .admin-modal-header {
+    padding: 1rem 1.15rem !important;
+  }
+
+  .admin-modal-body {
+    padding: 1.15rem !important;
+    gap: 1rem !important;
+  }
+
+  .admin-modal-footer {
+    padding: 0.85rem 1.15rem !important;
+    flex-direction: column-reverse;
+  }
+
+  .admin-modal-footer button {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1826,6 +1869,8 @@
 
   .dash-logout-btn {
     padding: 0.5rem;
+    min-height: 40px;
+    min-width: 40px;
   }
 
   .dash-metric-card {
@@ -1834,6 +1879,24 @@
 
   .dash-panel-card {
     padding: 1.15rem;
+  }
+
+  .admin-modal-card {
+    border-radius: 12px !important;
+  }
+
+  /* Prevent mobile browser zoom on focus */
+  .admin-form-group input,
+  .admin-form-group select,
+  .admin-form-group textarea {
+    font-size: 16px !important;
+    min-height: 44px;
+  }
+
+  .admin-btn-primary,
+  .admin-btn-secondary {
+    min-height: 44px !important;
+    font-size: 0.9rem !important;
   }
 }
 

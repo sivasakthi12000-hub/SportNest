@@ -413,7 +413,9 @@ async function startServer() {
   // CUSTOM SPORTS PERSISTENCE API
   // =======================================================
   const CUSTOM_SPORTS_FILE = path.join(process.cwd(), "data", "custom_sports.json");
+  const DELETED_SPORTS_FILE = path.join(process.cwd(), "data", "deleted_sports.json");
   let customSportsStore: any[] = [];
+  let deletedSportsStore: string[] = [];
 
   function loadCustomSportsFromDisk() {
     try {
@@ -422,7 +424,13 @@ async function startServer() {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           customSportsStore = parsed;
-          return;
+        }
+      }
+      if (fs.existsSync(DELETED_SPORTS_FILE)) {
+        const rawDel = fs.readFileSync(DELETED_SPORTS_FILE, "utf-8");
+        const parsedDel = JSON.parse(rawDel);
+        if (Array.isArray(parsedDel)) {
+          deletedSportsStore = parsedDel;
         }
       }
     } catch (e) {
@@ -437,6 +445,7 @@ async function startServer() {
         fs.mkdirSync(dataDir, { recursive: true });
       }
       fs.writeFileSync(CUSTOM_SPORTS_FILE, JSON.stringify(customSportsStore, null, 2), "utf-8");
+      fs.writeFileSync(DELETED_SPORTS_FILE, JSON.stringify(deletedSportsStore, null, 2), "utf-8");
     } catch (e) {
       console.error("Failed to save custom sports to disk:", e);
     }
@@ -446,7 +455,7 @@ async function startServer() {
 
   app.get("/api/sports", (req, res) => {
     loadCustomSportsFromDisk();
-    res.json({ success: true, sports: customSportsStore });
+    res.json({ success: true, sports: customSportsStore, deleted: deletedSportsStore });
   });
 
   app.post("/api/sports", (req, res) => {
@@ -458,9 +467,13 @@ async function startServer() {
     loadCustomSportsFromDisk();
 
     const cleanName = name.trim();
+    // If it was in deletedSportsStore, un-delete it
+    deletedSportsStore = deletedSportsStore.filter((d) => d.toLowerCase() !== cleanName.toLowerCase());
+
     // Check if already exists
     const existing = customSportsStore.find((s) => s.name.toLowerCase() === cleanName.toLowerCase());
     if (existing) {
+      saveCustomSportsToDisk();
       return res.json({ success: true, data: existing, message: "Sport already exists" });
     }
 
@@ -483,6 +496,81 @@ async function startServer() {
 
     console.log(`[Backend Sports] New sport added: ${cleanName} (ID: ${nextId})`);
     res.json({ success: true, data: newSport, message: `Sport "${cleanName}" saved successfully.` });
+  });
+
+  // Update sport details
+  app.patch("/api/sports/:id", (req, res) => {
+    const target = req.params.id;
+    const { groundName, surface, format, rules, description, accentColor, name } = req.body || {};
+    loadCustomSportsFromDisk();
+
+    const index = customSportsStore.findIndex(
+      (s) => String(s.id) === String(target) || s.name.toLowerCase() === String(target).toLowerCase()
+    );
+
+    if (index >= 0) {
+      const existing = customSportsStore[index];
+      customSportsStore[index] = {
+        ...existing,
+        name: name?.trim() || existing.name,
+        groundName: groundName !== undefined ? groundName.trim() : existing.groundName,
+        surface: surface !== undefined ? surface.trim() : existing.surface,
+        format: format !== undefined ? format.trim() : existing.format,
+        rules: rules !== undefined ? rules.trim() : existing.rules,
+        description: description !== undefined ? description.trim() : existing.description,
+        accentColor: accentColor || existing.accentColor,
+        updatedAt: new Date().toISOString(),
+      };
+      saveCustomSportsToDisk();
+      return res.json({ success: true, data: customSportsStore[index] });
+    } else {
+      // If it was a base sport, add it to customSportsStore with the customized details!
+      const nextId = Number(target) || 100 + customSportsStore.length + 1;
+      const cleanName = (name || target).trim();
+      const newOverride = {
+        id: nextId,
+        name: cleanName,
+        groundName: groundName?.trim() || `${cleanName} Arena`,
+        surface: surface?.trim() || "Natural / Synthetic",
+        format: format?.trim() || "Standard Competition",
+        rules: rules?.trim() || "Standard Official Rules",
+        description: description?.trim() || `Sanctioned competition discipline for ${cleanName}.`,
+        accentColor: accentColor || "#10b981",
+        updatedAt: new Date().toISOString(),
+      };
+      customSportsStore.push(newOverride);
+      saveCustomSportsToDisk();
+      return res.json({ success: true, data: newOverride });
+    }
+  });
+
+  // Delete sport endpoint
+  app.delete("/api/sports/:id", (req, res) => {
+    const target = req.params.id;
+    const targetName = (req.query.name as string) || "";
+    loadCustomSportsFromDisk();
+
+    const beforeLen = customSportsStore.length;
+    customSportsStore = customSportsStore.filter((s) => {
+      const matchId = String(s.id) === String(target);
+      const matchName =
+        s.name.toLowerCase() === String(target).toLowerCase() ||
+        (targetName && s.name.toLowerCase() === targetName.toLowerCase());
+      return !matchId && !matchName;
+    });
+
+    // Mark as deleted in tombstone store
+    const tombstoneEntries = [String(target)];
+    if (targetName) tombstoneEntries.push(targetName.toLowerCase());
+    tombstoneEntries.forEach((entry) => {
+      if (!deletedSportsStore.some((d) => d.toLowerCase() === entry.toLowerCase())) {
+        deletedSportsStore.push(entry);
+      }
+    });
+
+    saveCustomSportsToDisk();
+    console.log(`[Backend Sports] Sport removed: ${target} / ${targetName}. Store size: ${customSportsStore.length}`);
+    res.json({ success: true, removedCount: beforeLen - customSportsStore.length });
   });
 
   // =======================================================
