@@ -198,10 +198,10 @@ const Navbar = () => {
             onMouseLeave={() => setShowUserMenu(false)}
           >
             <Link
-              to="/dashboard"
+              to="/profile"
               className="nav-user-btn authenticated"
               id="nav-user-btn"
-              title={`Signed in as ${user.username} (Go to Dashboard)`}
+              title={`Signed in as ${user.username} (View Profile)`}
             >
               <div className="nav-user-avatar">
                 <User size={16} />
@@ -213,9 +213,19 @@ const Navbar = () => {
               <div className="nav-user-dropdown">
                 <div className="nav-user-header">
                   <strong>{user.username}</strong>
-                  <span className="user-role-tag">Organizer</span>
+                  <span className="user-role-tag">
+                    {user.role === "superadmin" ? "Super Admin" : "Organizer"}
+                  </span>
                 </div>
                 <div className="dropdown-divider" />
+                <Link
+                  to="/profile"
+                  className="nav-user-dropdown-item"
+                  onClick={() => setShowUserMenu(false)}
+                >
+                  <User size={15} />
+                  <span>My Profile</span>
+                </Link>
                 <Link
                   to="/dashboard"
                   className="nav-user-dropdown-item"

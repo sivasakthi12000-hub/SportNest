@@ -79,6 +79,7 @@ export interface Tournament {
   description: string;
   createdBy?: string;
   mapUrl?: string;
+  rules?: string;
 }
 
 export interface Team {
@@ -136,8 +137,21 @@ export function normalizeTournament(t: any): Tournament {
   const createdBy = t.createdBy || t.created_by || extractTagValue(desc, "created_by") || "";
   const mapUrl = t.mapUrl || t.map_url || extractTagValue(desc, "map_url") || "";
 
+  // Extract rules if provided
+  let rules = t.rules || "";
+  if (!rules) {
+    const rawRules = extractTagValue(desc, "rules");
+    if (rawRules) {
+      try {
+        rules = decodeURIComponent(rawRules);
+      } catch {
+        rules = rawRules;
+      }
+    }
+  }
+
   // Clean description for display by removing internal brackets tags
-  const cleanDescription = desc.replace(/\[(pincode|address|prizes|created_by|map_url):[^\]]+\]/gi, "").trim();
+  const cleanDescription = desc.replace(/\[(pincode|address|prizes|created_by|map_url|rules):[^\]]+\]/gi, "").trim();
 
   return {
     id: Number(t.id),
@@ -160,6 +174,7 @@ export function normalizeTournament(t: any): Tournament {
     description: cleanDescription || desc,
     createdBy: createdBy || undefined,
     mapUrl: mapUrl || undefined,
+    rules: rules ? rules.trim() : undefined,
   };
 }
 
@@ -600,18 +615,6 @@ export async function getTeamsByTournamentId(tournamentId: number): Promise<Team
     }
   }
 
-  // Generate realistic deterministic demo teams if unconfigured
-  if (!isSupabaseReady()) {
-    return [
-      { id: 101, name: "Thunder Strikers", tournamentId, group: "A", members: 11 },
-      { id: 102, name: "Viper Knights", tournamentId, group: "A", members: 11 },
-      { id: 103, name: "Apex Warriors", tournamentId, group: "B", members: 11 },
-      { id: 104, name: "Titan Gladiators", tournamentId, group: "B", members: 11 },
-      { id: 105, name: "Blaze United", tournamentId, group: "A", members: 11 },
-      { id: 106, name: "Falcon Express", tournamentId, group: "B", members: 11 },
-    ];
-  }
-
   return [];
 }
 
@@ -637,14 +640,7 @@ export async function getTeamById(id: number): Promise<Team | null> {
     }
   }
 
-  // Fallback demo team
-  return {
-    id: Number(id),
-    name: `Team #${id}`,
-    tournamentId: 1,
-    group: "A",
-    members: 11,
-  };
+  return null;
 }
 
 // Create tournament in Supabase (with instant local caching and metadata tag encoding)
@@ -658,6 +654,7 @@ export async function createTournament(tournament: Partial<Tournament>): Promise
   }
   if (tournament.createdBy) tags.push(`[created_by:${tournament.createdBy}]`);
   if (tournament.mapUrl) tags.push(`[map_url:${tournament.mapUrl.trim()}]`);
+  if (tournament.rules) tags.push(`[rules:${encodeURIComponent(tournament.rules.trim())}]`);
 
   const rawDesc = tournament.description?.trim() || "Tournament registered via SportsNest.";
   const packagedDescription = `${tags.join("")} ${rawDesc}`.trim();
@@ -684,6 +681,7 @@ export async function createTournament(tournament: Partial<Tournament>): Promise
     description: rawDesc,
     createdBy: tournament.createdBy || "admin",
     mapUrl: tournament.mapUrl,
+    rules: tournament.rules,
   };
 
   const client = getSupabase();
@@ -749,8 +747,25 @@ export async function getTotalTeamsCount(): Promise<number> {
   return 0;
 }
 
-// Register team in Supabase
-export async function registerTeam(team: { name: string; tournamentId: number; group?: string; members?: number }): Promise<{ success: boolean; data?: any; error?: string }> {
+// Register team in Supabase & Backend Registry
+export async function registerTeam(team: {
+  name: string;
+  tournamentId: number;
+  tournamentName?: string;
+  group?: string;
+  members?: number;
+}): Promise<{ success: boolean; data?: any; error?: string }> {
+  // Sync to backend persistent store
+  try {
+    await fetch("/api/teams", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(team),
+    });
+  } catch (err) {
+    console.warn("Backend team registration notice:", err);
+  }
+
   const client = getSupabase();
   if (client) {
     try {
@@ -787,29 +802,82 @@ export async function registerTeam(team: { name: string; tournamentId: number; g
       return { success: false, error: err.message };
     }
   }
-  return { success: false, error: "Supabase connection is not configured." };
+  return { success: true, data: { id: Date.now() % 100000, ...team } };
 }
 
-// Fetch all teams across all tournaments from Supabase
-export async function getAllTeams(): Promise<(Team & { tournamentName?: string; createdAt?: string })[]> {
+// Update existing team
+export async function updateTeam(
+  id: number,
+  updates: Partial<Team> & { tournamentName?: string }
+): Promise<{ success: boolean; error?: string }> {
+  // Update backend persistent store
+  try {
+    await fetch(`/api/teams/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+  } catch (err) {
+    console.warn("Backend team update notice:", err);
+  }
+
   const client = getSupabase();
   if (client) {
     try {
-      // Fetch tournaments lookup dictionary for guaranteed tournament names
+      const payload: any = {};
+      if (updates.name !== undefined) payload.name = updates.name;
+      if (updates.group !== undefined) payload.group = updates.group;
+      if (updates.members !== undefined) payload.members = updates.members;
+      if (updates.tournamentId !== undefined) payload.tournament_id = updates.tournamentId;
+      const { error } = await client.from("teams").update(payload).eq("id", id);
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  }
+  return { success: true };
+}
+
+// Fetch all teams across all tournaments from Supabase and Backend Registry
+export async function getAllTeams(): Promise<(Team & { tournamentName?: string; createdAt?: string })[]> {
+  let backendTeams: (Team & { tournamentName?: string; createdAt?: string })[] = [];
+  try {
+    const res = await fetch("/api/teams");
+    if (res.ok) {
+      const json = await res.json();
+      if (json.teams && Array.isArray(json.teams)) {
+        backendTeams = json.teams.map((t: any) => ({
+          id: Number(t.id),
+          name: t.name,
+          tournamentId: Number(t.tournamentId),
+          group: t.group || "A",
+          members: Number(t.members || 11),
+          tournamentName: t.tournamentName || `Tournament #${t.tournamentId}`,
+          createdAt: t.createdAt || "",
+        }));
+      }
+    }
+  } catch (err) {
+    console.warn("Notice querying backend teams:", err);
+  }
+
+  const client = getSupabase();
+  if (client) {
+    try {
       const { data: tourneys } = await client.from("tournaments").select("id, name");
       const tourneyMap = new Map<number, string>();
       if (tourneys) {
         tourneys.forEach((t: any) => tourneyMap.set(Number(t.id), t.name));
       }
 
-      // First try join query
       const { data, error } = await client
         .from("teams")
         .select("*, tournaments(id, name)")
         .order("id", { ascending: false });
 
       if (!error && data) {
-        return data.map((t: any) => ({
+        const supaTeams = data.map((t: any) => ({
           ...normalizeTeam(t),
           tournamentName:
             t.tournaments?.name ||
@@ -817,36 +885,50 @@ export async function getAllTeams(): Promise<(Team & { tournamentName?: string; 
             `Tournament #${t.tournament_id || t.tournamentId}`,
           createdAt: t.created_at || "",
         }));
-      }
 
-      // Fallback query if foreign key join is restricted
-      const { data: simpleTeams } = await client
-        .from("teams")
-        .select("*")
-        .order("id", { ascending: false });
-
-      if (simpleTeams) {
-        return simpleTeams.map((t: any) => ({
-          ...normalizeTeam(t),
-          tournamentName:
-            tourneyMap.get(Number(t.tournament_id || t.tournamentId)) ||
-            `Tournament #${t.tournament_id || t.tournamentId}`,
-          createdAt: t.created_at || "",
-        }));
+        // Merge backend and supabase without duplicates
+        const seenIds = new Set(supaTeams.map((t) => t.id));
+        const uniqueBackend = backendTeams.filter((t) => !seenIds.has(t.id));
+        return [...uniqueBackend, ...supaTeams];
       }
     } catch (err) {
-      console.warn("Notice fetching all teams from Supabase:", err);
+      console.warn("Notice fetching teams from Supabase:", err);
     }
   }
-  return [];
+
+  return backendTeams;
 }
 
 // Delete a tournament from Supabase
 export async function deleteTournament(id: number): Promise<{ success: boolean; error?: string }> {
+  // Update local storage cache
+  try {
+    const localList = getLocalCreatedTournaments();
+    const updated = localList.filter((t) => t.id !== id);
+    localStorage.setItem(LOCAL_CREATED_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.warn("Notice removing tournament from local cache:", e);
+  }
+
+  // Audit log
+  try {
+    await fetch("/api/admin/audit-logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        actor: "admin",
+        action: "Deleted Tournament",
+        target: `Tournament #${id}`,
+        status: "warning",
+      }),
+    });
+  } catch {
+    // ignore
+  }
+
   const client = getSupabase();
   if (client) {
     try {
-      // Delete associated teams first to satisfy referential integrity
       await client.from("teams").delete().eq("tournament_id", id);
       const { error } = await client.from("tournaments").delete().eq("id", id);
       if (error) return { success: false, error: error.message };
@@ -855,16 +937,45 @@ export async function deleteTournament(id: number): Promise<{ success: boolean; 
       return { success: false, error: err.message };
     }
   }
-  return { success: false, error: "Supabase connection is not configured." };
+  return { success: true };
 }
 
-// Update tournament fields (status, prize, teams, dates, etc.) in Supabase
+// Update tournament fields (all properties including rules, prizes, venue, dates)
 export async function updateTournament(id: number, updates: Partial<Tournament>): Promise<{ success: boolean; error?: string }> {
+  // 1. Update local created tournament cache
+  try {
+    const localList = getLocalCreatedTournaments();
+    const index = localList.findIndex((t) => t.id === Number(id));
+    if (index >= 0) {
+      localList[index] = { ...localList[index], ...updates };
+      localStorage.setItem(LOCAL_CREATED_KEY, JSON.stringify(localList));
+    }
+  } catch (e) {
+    console.warn("Notice updating local tournament cache:", e);
+  }
+
+  // 2. Audit log
+  try {
+    await fetch("/api/admin/audit-logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        actor: "admin",
+        action: "Updated Tournament",
+        target: `${updates.name || `Tournament #${id}`}`,
+        status: "success",
+      }),
+    });
+  } catch {
+    // ignore
+  }
+
   const client = getSupabase();
   if (client) {
     try {
       const payload: any = {};
       if (updates.name !== undefined) payload.name = updates.name;
+      if (updates.sportId !== undefined) payload.sport_id = updates.sportId;
       if (updates.status !== undefined) payload.status = updates.status;
       if (updates.prizeAmount !== undefined) payload.prize_amount = updates.prizeAmount;
       if (updates.entryFee !== undefined) payload.entry_fee = updates.entryFee;
@@ -877,6 +988,23 @@ export async function updateTournament(id: number, updates: Partial<Tournament>)
       if (updates.date !== undefined) payload.date = updates.date;
       if (updates.lastRegistrationDate !== undefined) payload.last_registration_date = updates.lastRegistrationDate;
 
+      // Pack metadata tags into description if rules or extra fields changed
+      if (updates.rules !== undefined || updates.pincode !== undefined || updates.address !== undefined || updates.mapUrl !== undefined) {
+        const tags: string[] = [];
+        if (updates.pincode) tags.push(`[pincode:${updates.pincode}]`);
+        if (updates.address) tags.push(`[address:${updates.address}]`);
+        if (updates.prizeBreakdown && updates.prizeBreakdown.length > 0) {
+          tags.push(`[prizes:${JSON.stringify(updates.prizeBreakdown)}]`);
+        }
+        if (updates.mapUrl) tags.push(`[map_url:${updates.mapUrl.trim()}]`);
+        if (updates.rules) tags.push(`[rules:${encodeURIComponent(updates.rules.trim())}]`);
+
+        const rawDesc = updates.description?.trim() || "Tournament registered via SportsNest.";
+        payload.description = `${tags.join("")} ${rawDesc}`.trim();
+      } else if (updates.description !== undefined) {
+        payload.description = updates.description;
+      }
+
       const { error } = await client.from("tournaments").update(payload).eq("id", id);
       if (error) return { success: false, error: error.message };
       return { success: true };
@@ -884,11 +1012,17 @@ export async function updateTournament(id: number, updates: Partial<Tournament>)
       return { success: false, error: err.message };
     }
   }
-  return { success: false, error: "Supabase connection is not configured." };
+  return { success: true };
 }
 
-// Delete team from Supabase
+// Delete team from Supabase & Backend Registry
 export async function deleteTeam(id: number, tournamentId?: number): Promise<{ success: boolean; error?: string }> {
+  try {
+    await fetch(`/api/teams/${id}`, { method: "DELETE" });
+  } catch (err) {
+    console.warn("Notice deleting backend team:", err);
+  }
+
   const client = getSupabase();
   if (client) {
     try {
@@ -917,7 +1051,7 @@ export async function deleteTeam(id: number, tournamentId?: number): Promise<{ s
       return { success: false, error: err.message };
     }
   }
-  return { success: false, error: "Supabase connection is not configured." };
+  return { success: true };
 }
 
 // Create sport in Supabase with resilient backend and localStorage fallback

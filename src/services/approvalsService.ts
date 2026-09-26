@@ -1,6 +1,7 @@
 /**
  * Approvals Service
  * Manages pending team registrations and approval/rejection workflows.
+ * Connects directly to persistent backend API and Supabase registrations table.
  */
 import { getSupabase } from "../lib/supabase";
 import { registerTeam } from "./dataService";
@@ -16,7 +17,7 @@ export interface PendingRegistration {
   email: string;
   memberCount: number;
   entryFee: number;
-  paymentStatus: "Verified Paid" | "Pending Verification" | "Cash on Venue";
+  paymentStatus: string;
   status: "pending" | "approved" | "rejected";
   appliedAt: string;
   notes?: string;
@@ -24,84 +25,17 @@ export interface PendingRegistration {
 
 const STORAGE_KEY = "sportsnest_pending_approvals";
 
-const DEFAULT_PENDING_REGISTRATIONS: PendingRegistration[] = [
-  {
-    id: "APP-101",
-    teamName: "Kovai Thunderbolts",
-    tournamentId: 1,
-    tournamentName: "Chennai Super Cup Soccer Championship",
-    sportName: "Soccer",
-    captainName: "Karthik Raja",
-    contactPhone: "+91 98421 55670",
-    email: "karthik.raja@gmail.com",
-    memberCount: 11,
-    entryFee: 1500,
-    paymentStatus: "Verified Paid",
-    status: "pending",
-    appliedAt: "2026-09-11T08:30:00.000Z",
-    notes: "State-level qualified team with verified Aadhaar credentials.",
-  },
-  {
-    id: "APP-102",
-    teamName: "Madurai Veeran Kabaddi Club",
-    tournamentId: 5,
-    tournamentName: "Tamil Nadu State Pro Kabaddi Trophy",
-    sportName: "Kabaddi",
-    captainName: "M. Saravanan",
-    contactPhone: "+91 94432 78910",
-    email: "saravanan.kabaddi@gmail.com",
-    memberCount: 7,
-    entryFee: 800,
-    paymentStatus: "Verified Paid",
-    status: "pending",
-    appliedAt: "2026-09-11T09:15:00.000Z",
-    notes: "Division 1 champions from southern zone.",
-  },
-  {
-    id: "APP-103",
-    teamName: "Kongu Spike Strikers",
-    tournamentId: 6,
-    tournamentName: "Erode District Floodlight Volleyball Open",
-    sportName: "Volleyball",
-    captainName: "Pradeep Kumar",
-    contactPhone: "+91 97880 12345",
-    email: "pradeep.spike@gmail.com",
-    memberCount: 6,
-    entryFee: 600,
-    paymentStatus: "Pending Verification",
-    status: "pending",
-    appliedAt: "2026-09-10T18:45:00.000Z",
-    notes: "UTR transaction confirmation attached.",
-  },
-  {
-    id: "APP-104",
-    teamName: "Salem Smashers Badminton Squad",
-    tournamentId: 8,
-    tournamentName: "Salem Open Badminton Grand Prix",
-    sportName: "Badminton",
-    captainName: "Ananya Balan",
-    contactPhone: "+91 99520 87654",
-    email: "ananya.balan@outlook.com",
-    memberCount: 4,
-    entryFee: 1000,
-    paymentStatus: "Verified Paid",
-    status: "pending",
-    appliedAt: "2026-09-10T16:20:00.000Z",
-    notes: "Includes 2 seeded junior ranking players.",
-  },
-];
-
 function getStoredApprovals(): PendingRegistration[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch {
     // Ignore
   }
-  return DEFAULT_PENDING_REGISTRATIONS;
+  return [];
 }
 
 function saveStoredApprovals(list: PendingRegistration[]) {
@@ -112,7 +46,45 @@ function saveStoredApprovals(list: PendingRegistration[]) {
   }
 }
 
-export async function getPendingApprovals(): Promise<PendingRegistration[]> {
+export async function getPendingApprovals(options?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+}): Promise<{
+  registrations: PendingRegistration[];
+  total: number;
+  page?: number;
+  pageSize?: number;
+  totalPages?: number;
+}> {
+  // 1. Try backend API with server-side pagination
+  try {
+    const params = new URLSearchParams();
+    if (options?.page) params.set("page", String(options.page));
+    if (options?.pageSize) params.set("pageSize", String(options.pageSize));
+    if (options?.search) params.set("search", options.search);
+    if (options?.status) params.set("status", options.status);
+
+    const res = await fetch(`/api/approvals?${params.toString()}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.registrations) {
+        saveStoredApprovals(data.registrations);
+        return {
+          registrations: data.registrations,
+          total: data.total || data.registrations.length,
+          page: data.page,
+          pageSize: data.pageSize,
+          totalPages: data.totalPages,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("Backend approvals query notice:", err);
+  }
+
+  // 2. Try Supabase
   const client = getSupabase();
   if (client) {
     try {
@@ -122,7 +94,7 @@ export async function getPendingApprovals(): Promise<PendingRegistration[]> {
         .order("created_at", { ascending: false });
 
       if (!error && data && data.length > 0) {
-        return data.map((d: any) => ({
+        const mapped = data.map((d: any) => ({
           id: String(d.id),
           teamName: d.team_name || d.name || "Pending Squad",
           tournamentId: Number(d.tournament_id || 1),
@@ -138,17 +110,68 @@ export async function getPendingApprovals(): Promise<PendingRegistration[]> {
           appliedAt: d.created_at || new Date().toISOString(),
           notes: d.notes,
         }));
+        return { registrations: mapped, total: mapped.length };
       }
     } catch {
       // Gracefully fall through to synced local store
     }
   }
-  return getStoredApprovals();
+
+  const local = getStoredApprovals();
+  return { registrations: local, total: local.length };
+}
+
+export async function submitRegistration(
+  reg: Partial<PendingRegistration>
+): Promise<{ success: boolean; registration?: PendingRegistration; error?: string }> {
+  try {
+    const res = await fetch("/api/approvals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(reg),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return { success: true, registration: data.registration };
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+  return { success: false, error: "Failed to submit registration" };
+}
+
+export async function updateRegistration(
+  id: string,
+  updates: Partial<PendingRegistration>
+): Promise<{ success: boolean; registration?: PendingRegistration; error?: string }> {
+  try {
+    const res = await fetch(`/api/approvals/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return { success: true, registration: data.registration };
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+  return { success: false, error: "Failed to update registration" };
 }
 
 export async function approveRegistration(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(`/api/approvals/${id}/approve`, { method: "POST" });
+    if (res.ok) {
+      return { success: true };
+    }
+  } catch (err: any) {
+    console.warn("Backend approve notice:", err);
+  }
+
   const list = getStoredApprovals();
   const target = list.find((item) => item.id === id);
   if (!target) return { success: false, error: "Registration not found" };
@@ -156,11 +179,11 @@ export async function approveRegistration(
   target.status = "approved";
   saveStoredApprovals(list);
 
-  // Attempt to register in Supabase teams table
   try {
     await registerTeam({
       name: target.teamName,
       tournamentId: target.tournamentId,
+      tournamentName: target.tournamentName,
       group: "A",
       members: target.memberCount,
     });
@@ -171,10 +194,7 @@ export async function approveRegistration(
   const client = getSupabase();
   if (client) {
     try {
-      await client
-        .from("registrations")
-        .update({ status: "approved" })
-        .eq("id", id);
+      await client.from("registrations").update({ status: "approved" }).eq("id", id);
     } catch {
       // Table may not exist; local state is preserved
     }
@@ -187,6 +207,19 @@ export async function rejectRegistration(
   id: string,
   reason?: string
 ): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(`/api/approvals/${id}/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    });
+    if (res.ok) {
+      return { success: true };
+    }
+  } catch (err: any) {
+    console.warn("Backend reject notice:", err);
+  }
+
   const list = getStoredApprovals();
   const target = list.find((item) => item.id === id);
   if (!target) return { success: false, error: "Registration not found" };
@@ -198,10 +231,7 @@ export async function rejectRegistration(
   const client = getSupabase();
   if (client) {
     try {
-      await client
-        .from("registrations")
-        .update({ status: "rejected" })
-        .eq("id", id);
+      await client.from("registrations").update({ status: "rejected" }).eq("id", id);
     } catch {
       // Table may not exist; local state is preserved
     }
@@ -210,7 +240,22 @@ export async function rejectRegistration(
   return { success: true };
 }
 
+export async function deleteRegistration(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(`/api/approvals/${id}`, { method: "DELETE" });
+    if (res.ok) return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+
+  const list = getStoredApprovals().filter((item) => item.id !== id);
+  saveStoredApprovals(list);
+  return { success: true };
+}
+
 export async function getPendingApprovalsCount(): Promise<number> {
-  const items = await getPendingApprovals();
-  return items.filter((i) => i.status === "pending").length;
+  const result = await getPendingApprovals({ status: "pending" });
+  return result.total || 0;
 }

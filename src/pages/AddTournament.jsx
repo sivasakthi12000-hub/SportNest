@@ -26,6 +26,7 @@ import {
   getDistrictsForState,
 } from "../utils/locationService";
 import { useAuth } from "../context/AuthContext";
+import { WysiwygEditor } from "../components/WysiwygEditor";
 import "../styles/forms.css";
 
 /**
@@ -157,6 +158,7 @@ const AddTournament = () => {
     entryFee: "1000",
     maxTeams: "16",
     description: "",
+    rules: "",
   });
 
   // Google Map Pinned Location Preview
@@ -488,6 +490,7 @@ const AddTournament = () => {
       prizeBreakdown: prizes,
       maxTeams: Number(formData.maxTeams || 16),
       description: formData.description?.trim() || "Sanctioned sports tournament on SportsNest.",
+      rules: formData.rules?.trim() || undefined,
       createdBy: finalUsername,
     };
 
@@ -1020,150 +1023,70 @@ const AddTournament = () => {
               </p>
             </div>
 
-            {/* DOWN: SHOW THAT GOOGLE MAP LOCATION PINNED IF USER GIVES THE URL */}
-            {formData.mapUrl && embedMapSrc ? (
+            {/* GOOGLE MAP STATUS (NO EMBEDDED IFRAME DURING TOURNAMENT CREATION) */}
+            {formData.mapUrl ? (
               <div
                 style={{
-                  marginTop: "0.85rem",
-                  borderRadius: "10px",
-                  overflow: "hidden",
+                  marginTop: "0.75rem",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  background: "rgba(15, 23, 42, 0.7)",
                   border: "1px solid rgba(56, 189, 248, 0.4)",
-                  background: "rgba(10, 15, 29, 0.95)",
-                  boxShadow: "0 6px 20px rgba(0, 0, 0, 0.45)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "8px",
                 }}
               >
-                {/* Header status bar */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "8px 14px",
-                    background: "rgba(15, 23, 42, 0.95)",
-                    borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-                    fontSize: "0.82rem",
-                    flexWrap: "wrap",
-                    gap: "8px",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span
+                    style={{
+                      width: "8px",
+                      height: "8px",
+                      borderRadius: "50%",
+                      background: "#10b981",
+                      display: "inline-block",
+                      boxShadow: "0 0 8px #10b981",
+                    }}
+                  />
+                  <strong style={{ color: "#38bdf8", fontSize: "0.85rem" }}>
+                    Venue Google Maps Location Attached
+                  </strong>
+                  {detectedLocationLabel && (
                     <span
                       style={{
-                        width: "9px",
-                        height: "9px",
-                        borderRadius: "50%",
-                        background: "#10b981",
-                        display: "inline-block",
-                        boxShadow: "0 0 8px #10b981",
+                        background: "rgba(56, 189, 248, 0.15)",
+                        color: "#bae6fd",
+                        padding: "2px 8px",
+                        borderRadius: "4px",
+                        fontSize: "0.75rem",
                       }}
-                    />
-                    <strong style={{ color: "#38bdf8" }}>Venue Location Pinned on Google Map</strong>
-                    {detectedLocationLabel && (
-                      <span
-                        style={{
-                          background: "rgba(56, 189, 248, 0.15)",
-                          color: "#bae6fd",
-                          padding: "2px 8px",
-                          borderRadius: "4px",
-                          fontSize: "0.75rem",
-                          fontWeight: 500,
-                        }}
-                      >
-                        {detectedLocationLabel}
-                      </span>
-                    )}
-                  </div>
-
-                  <a
-                    href={formData.mapUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "4px",
-                      color: "#38bdf8",
-                      textDecoration: "none",
-                      fontWeight: 600,
-                      fontSize: "0.78rem",
-                    }}
-                  >
-                    <span>Open in Google Maps</span>
-                    <ExternalLink size={13} />
-                  </a>
+                    >
+                      {detectedLocationLabel}
+                    </span>
+                  )}
                 </div>
 
-                {/* Google Map iframe */}
-                <div style={{ width: "100%", height: "270px", position: "relative", background: "#0b0f19" }}>
-                  <iframe
-                    title="Venue Google Map Pinned Location"
-                    src={embedMapSrc}
-                    width="100%"
-                    height="100%"
-                    style={{ border: 0, display: "block" }}
-                    allowFullScreen=""
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                  />
-                </div>
-
-                <div
+                <a
+                  href={formData.mapUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   style={{
-                    padding: "6px 12px",
-                    background: "rgba(15, 23, 42, 0.7)",
-                    fontSize: "0.75rem",
-                    color: "#94a3b8",
-                    display: "flex",
+                    display: "inline-flex",
                     alignItems: "center",
-                    gap: "6px",
-                  }}
-                >
-                  <MapPin size={13} style={{ color: "#10b981" }} />
-                  <span>
-                    Location successfully pinned. Participants will be able to navigate directly to this ground.
-                  </span>
-                </div>
-              </div>
-            ) : (
-              /* Helpful Empty state */
-              <div
-                style={{
-                  marginTop: "0.85rem",
-                  padding: "1.25rem 1rem",
-                  borderRadius: "10px",
-                  border: "1px dashed rgba(255, 255, 255, 0.15)",
-                  background: "rgba(255, 255, 255, 0.02)",
-                  textAlign: "center",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "6px",
-                }}
-              >
-                <div
-                  style={{
-                    width: "40px",
-                    height: "40px",
-                    borderRadius: "50%",
-                    background: "rgba(56, 189, 248, 0.1)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    gap: "5px",
                     color: "#38bdf8",
-                    marginBottom: "2px",
+                    textDecoration: "none",
+                    fontWeight: 600,
+                    fontSize: "0.82rem",
                   }}
                 >
-                  <MapPin size={20} />
-                </div>
-                <div style={{ fontSize: "0.88rem", fontWeight: 600, color: "#e2e8f0" }}>
-                  Interactive Google Map Preview
-                </div>
-                <div style={{ fontSize: "0.8rem", color: "#94a3b8", maxWidth: "460px" }}>
-                  Paste a Google Maps URL above to show your venue location pinned on an interactive Google Map, or click <strong>Auto-pin from Address</strong> to generate one.
-                </div>
+                  <span>Open in Google Maps (New Tab)</span>
+                  <ExternalLink size={13} />
+                </a>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -1426,6 +1349,37 @@ const AddTournament = () => {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* =====================================================================
+            SECTION 4: DISCIPLINE SPECIFICATIONS & RULES (WYSIWYG KITCHEN SINK)
+            ===================================================================== */}
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.6)",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            borderRadius: "12px",
+            padding: "1.25rem",
+            marginBottom: "1.5rem",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem", flexWrap: "wrap", gap: "6px" }}>
+            <span style={{ fontWeight: 700, color: "#f8fafc", fontSize: "0.95rem" }}>
+              Discipline Specifications & Rules (Optional)
+            </span>
+            <span style={{ fontSize: "0.75rem", color: "#38bdf8", background: "rgba(56, 189, 248, 0.15)", padding: "2px 8px", borderRadius: "4px" }}>
+              WYSIWYG Kitchen Sink
+            </span>
+          </div>
+          <p style={{ color: "#94a3b8", fontSize: "0.82rem", margin: "0 0 10px 0" }}>
+            Provide playing surface dimensions, ball/equipment specs, match duration, foul regulations, and tie-breakers. This section will only be visible on the tournament details page if filled here.
+          </p>
+          <WysiwygEditor
+            value={formData.rules}
+            onChange={(val) => setFormData((prev) => ({ ...prev, rules: val }))}
+            placeholder="Write discipline specifications, pitch dimensions, age limits, knock-out rules, points system..."
+            minHeight="150px"
+          />
         </div>
 
         {/* =====================================================================

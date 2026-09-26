@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import { Plus, Trash2, Trophy, MapPin, Navigation } from "lucide-react";
+import { Plus, Trash2, Trophy, MapPin, Navigation, ExternalLink } from "lucide-react";
 import { Sport, createTournament } from "../../services/dataService";
 import { useAuth } from "../../context/AuthContext";
-import { GoogleMapPreview } from "../GoogleMapPreview";
+import { WysiwygEditor } from "../WysiwygEditor";
 
 interface AdminCreateTournamentModalProps {
   sports: Sport[];
@@ -42,6 +42,7 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
   const [entryFee, setEntryFee] = useState(1200);
   const [maxTeams, setMaxTeams] = useState(16);
   const [description, setDescription] = useState("");
+  const [rules, setRules] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -111,6 +112,7 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
         prizeBreakdown: prizes,
         maxTeams: Number(maxTeams),
         description: description.trim() || "Sanctioned competition registered via SportsNest Admin.",
+        rules: rules.trim() || undefined,
         createdBy: user?.username || "admin",
       });
 
@@ -128,37 +130,72 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
   };
 
   return (
-    <div className="admin-modal-backdrop">
+    <div
+      className="admin-modal-overlay"
+      style={{
+        position: "fixed",
+        inset: 0,
+        backgroundColor: "rgba(15, 23, 42, 0.7)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 9999,
+        padding: "1rem",
+        overflowY: "auto",
+      }}
+    >
       <div
         className="admin-modal-card"
-        style={{ maxWidth: "680px", maxHeight: "90vh", overflowY: "auto" }}
+        style={{
+          background: "#ffffff",
+          borderRadius: "16px",
+          width: "100%",
+          maxWidth: "680px",
+          maxHeight: "90vh",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+          overflow: "hidden",
+        }}
       >
-        <div className="admin-modal-header">
+        <div className="admin-modal-header" style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid #e2e8f0" }}>
           <div>
-            <h3 style={{ margin: 0 }}>Create Tournament</h3>
-            <span style={{ fontSize: "0.8rem", color: "#64748b" }}>
-              SportsNest Supabase Synchronized Registry
-            </span>
+            <h2 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 800, color: "#0f172a" }}>
+              Create Tournament
+            </h2>
+            <p style={{ margin: "2px 0 0 0", fontSize: "0.82rem", color: "#64748b" }}>
+              Add a new sports tournament to Supabase database.
+            </p>
           </div>
           <button
             onClick={onClose}
-            style={{ background: "none", border: "none", fontSize: "1.2rem", cursor: "pointer" }}
+            style={{
+              background: "#f1f5f9",
+              border: "none",
+              borderRadius: "8px",
+              width: "32px",
+              height: "32px",
+              cursor: "pointer",
+              fontSize: "1.1rem",
+              color: "#64748b",
+            }}
           >
             ✕
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="admin-modal-body">
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1 }}>
+          <div className="admin-modal-body" style={{ overflowY: "auto", padding: "1.25rem 1.5rem", flex: 1 }}>
             {errorMsg && (
               <div
                 style={{
-                  padding: "0.65rem 1rem",
                   background: "#fef2f2",
+                  border: "1px solid #fecaca",
                   color: "#b91c1c",
+                  padding: "0.6rem 0.85rem",
                   borderRadius: "8px",
                   fontSize: "0.85rem",
-                  border: "1px solid #fecaca",
+                  marginBottom: "0.75rem",
                 }}
               >
                 {errorMsg}
@@ -166,11 +203,11 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
             )}
 
             <div className="admin-form-group">
-              <label>Tournament Title *</label>
+              <label>Tournament Name *</label>
               <input
                 type="text"
                 required
-                placeholder="e.g. Telangana Champions Premier Cup"
+                placeholder="e.g. Telangana Premier Badminton Cup 2026"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
@@ -203,19 +240,19 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
               </div>
             </div>
 
-            {/* Address & Pincode */}
+            {/* Venue Address & Location (Clean neutral panel) */}
             <div
               style={{
-                background: "rgba(16, 185, 129, 0.05)",
-                border: "1px solid rgba(16, 185, 129, 0.2)",
-                padding: "0.8rem",
-                borderRadius: "8px",
-                marginBottom: "0.75rem",
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                padding: "0.85rem",
+                borderRadius: "10px",
+                marginBottom: "0.85rem",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "0.5rem" }}>
-                <MapPin size={16} style={{ color: "#10b981" }} />
-                <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "0.6rem" }}>
+                <MapPin size={16} style={{ color: "#059669" }} />
+                <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#0f172a" }}>
                   Venue Address & Pincode
                 </span>
               </div>
@@ -243,7 +280,7 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
                 </div>
               </div>
 
-              <div className="admin-form-row" style={{ marginBottom: 0 }}>
+              <div className="admin-form-row" style={{ marginBottom: "0.5rem" }}>
                 <div className="admin-form-group">
                   <label>Ground / Stadium Name</label>
                   <input
@@ -265,8 +302,29 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
                 </div>
               </div>
 
-              {/* Google Maps Location URL & Live Pin Preview */}
-              <div style={{ marginTop: "0.75rem" }}>
+              <div className="admin-form-row" style={{ marginBottom: "0.5rem" }}>
+                <div className="admin-form-group">
+                  <label>State</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Telangana"
+                    value={state}
+                    onChange={(e) => setState(e.target.value)}
+                  />
+                </div>
+                <div className="admin-form-group">
+                  <label>District</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Hyderabad"
+                    value={district}
+                    onChange={(e) => setDistrict(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Map URL Input (No embedded iframe during creation, small test badge instead) */}
+              <div className="admin-form-group" style={{ marginTop: "0.25rem" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.35rem" }}>
                   <label style={{ fontSize: "0.82rem", fontWeight: 700, color: "#334155", display: "flex", alignItems: "center", gap: "0.3rem" }}>
                     <Navigation size={13} color="#0284c7" />
@@ -283,7 +341,7 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
                       border: "1px solid #bae6fd",
                       color: "#0284c7",
                       borderRadius: "4px",
-                      padding: "0.15rem 0.5rem",
+                      padding: "0.2rem 0.5rem",
                       fontSize: "0.72rem",
                       fontWeight: 700,
                       cursor: "pointer",
@@ -297,25 +355,43 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
                   placeholder="Paste Google Maps URL (e.g. https://maps.google.com/?q=...)"
                   value={mapUrl}
                   onChange={(e) => setMapUrl(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "0.55rem 0.75rem",
-                    borderRadius: "6px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "0.85rem",
-                  }}
                 />
 
-                {(mapUrl || address || groundName) && (
-                  <GoogleMapPreview
-                    mapUrl={mapUrl}
-                    address={address}
-                    pincode={pincode}
-                    groundName={groundName}
-                    location={location}
-                    state={state}
-                    height="180px"
-                  />
+                {mapUrl && (
+                  <div
+                    style={{
+                      marginTop: "0.45rem",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "0.45rem 0.75rem",
+                      borderRadius: "6px",
+                      background: "#f0fdf4",
+                      border: "1px solid #bbf7d0",
+                      fontSize: "0.8rem",
+                    }}
+                  >
+                    <span style={{ color: "#166534", display: "inline-flex", alignItems: "center", gap: "6px", fontWeight: 600 }}>
+                      <Navigation size={13} color="#16a34a" />
+                      Google Maps location linked
+                    </span>
+                    <a
+                      href={mapUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        color: "#059669",
+                        fontWeight: 700,
+                        textDecoration: "none",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                    >
+                      <span>Open in new tab</span>
+                      <ExternalLink size={12} />
+                    </a>
+                  </div>
                 )}
               </div>
             </div>
@@ -351,20 +427,20 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
               />
             </div>
 
-            {/* Multi-Tier Prize Breakdown */}
+            {/* Multi-Tier Prize Breakdown (Clean neutral panel) */}
             <div
               style={{
-                background: "rgba(245, 158, 11, 0.05)",
-                border: "1px solid rgba(245, 158, 11, 0.2)",
-                padding: "0.8rem",
-                borderRadius: "8px",
-                marginBottom: "0.75rem",
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                padding: "0.85rem",
+                borderRadius: "10px",
+                marginBottom: "0.85rem",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <Trophy size={16} style={{ color: "#d97706" }} />
-                  <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>
+                  <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#0f172a" }}>
                     Prize Distribution (1st to 8th & Special Awards)
                   </span>
                 </div>
@@ -372,8 +448,8 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
                   type="button"
                   onClick={addPrizeRow}
                   style={{
-                    background: "rgba(245, 158, 11, 0.15)",
-                    border: "none",
+                    background: "#fef3c7",
+                    border: "1px solid #fde68a",
                     color: "#b45309",
                     padding: "3px 8px",
                     borderRadius: "6px",
@@ -432,9 +508,30 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
               <label>Description & Notes</label>
               <textarea
                 rows={2}
-                placeholder="Tournament format, rules, sanctioned details..."
+                placeholder="Tournament format, rules overview, sanctioned details..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+
+            {/* Discipline Specifications & Rules WYSIWYG Kitchen-Sink Editor */}
+            <div className="admin-form-group" style={{ marginBottom: "0.85rem" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.35rem" }}>
+                <label style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a", margin: 0 }}>
+                  Discipline Specifications & Rules (Optional)
+                </label>
+                <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                  WYSIWYG Kitchen Sink
+                </span>
+              </div>
+              <p style={{ fontSize: "0.78rem", color: "#64748b", margin: "0 0 6px 0" }}>
+                Enter discipline rules, field dimensions, and equipment specs. Only shown on tournament page if provided here.
+              </p>
+              <WysiwygEditor
+                value={rules}
+                onChange={setRules}
+                placeholder="Write specific regulations, discipline court/field specifications, eligibility, foul rules, tie-breaker format..."
+                minHeight="140px"
               />
             </div>
           </div>

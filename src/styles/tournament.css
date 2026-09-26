@@ -1386,4 +1386,43 @@
   transform: translateX(-50%) translateY(0);
 }
 
+/* WYSIWYG Kitchen-Sink Formatted Rules Section */
+.rules-rich-content h2,
+.rules-rich-content h3,
+.rules-rich-content h4 {
+  color: #38bdf8;
+  margin-top: 0.75rem;
+  margin-bottom: 0.35rem;
+  font-weight: 700;
+}
+
+.rules-rich-content ul,
+.rules-rich-content ol {
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+
+.rules-rich-content li {
+  margin-bottom: 0.35rem;
+}
+
+.rules-rich-content blockquote {
+  border-left: 3px solid #38bdf8;
+  padding-left: 0.75rem;
+  margin: 0.75rem 0;
+  color: #94a3b8;
+  font-style: italic;
+  background: rgba(56, 189, 248, 0.05);
+  padding: 0.5rem 0.75rem;
+  border-radius: 0 6px 6px 0;
+}
+
+.rules-rich-content strong {
+  color: #f8fafc;
+}
+
+.rules-rich-content p {
+  margin: 0.4rem 0;
+}
+
 

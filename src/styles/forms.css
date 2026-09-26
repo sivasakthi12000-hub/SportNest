@@ -51,10 +51,11 @@ label {
   font-size: 0.95rem;
 }
 
-input,
-select {
+.tournament-form input,
+.tournament-form select,
+.tournament-form textarea {
   padding: 0.75rem 1rem;
-  border: 1px solid var(--border-color);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
   font-size: 1rem;
   font-family: inherit;
@@ -63,8 +64,9 @@ select {
   transition: all 0.2s ease;
 }
 
-input:focus,
-select:focus {
+.tournament-form input:focus,
+.tournament-form select:focus,
+.tournament-form textarea:focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
@@ -229,7 +231,19 @@ legend {
 }
 
 /* Responsive Design */
-@media (max-width: 600px) {
+@media (max-width: 640px) {
+  .form-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .tournament-form {
+    padding: 1.25rem !important;
+  }
+
+  .form-container {
+    padding: 0.75rem !important;
+  }
+
   .player-row {
     grid-template-columns: 1fr;
   }

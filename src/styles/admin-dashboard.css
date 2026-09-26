@@ -1324,20 +1324,47 @@
 
 .admin-form-group input,
 .admin-form-group select,
-.admin-form-group textarea {
+.admin-form-group textarea,
+.admin-modal-card input,
+.admin-modal-card select,
+.admin-modal-card textarea {
   padding: 0.65rem 0.85rem;
   border-radius: 8px;
   border: 1px solid #cbd5e1;
   font-size: 0.9rem;
   outline: none;
-  transition: border-color 0.2s ease;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.admin-form-group input::placeholder,
+.admin-form-group textarea::placeholder,
+.admin-modal-card input::placeholder,
+.admin-modal-card textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+.admin-form-group input:hover,
+.admin-form-group select:hover,
+.admin-form-group textarea:hover,
+.admin-modal-card input:hover,
+.admin-modal-card select:hover,
+.admin-modal-card textarea:hover {
+  border-color: #94a3b8;
+  background: #ffffff !important;
 }
 
 .admin-form-group input:focus,
 .admin-form-group select:focus,
-.admin-form-group textarea:focus {
-  border-color: #059669;
-  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15);
+.admin-form-group textarea:focus,
+.admin-modal-card input:focus,
+.admin-modal-card select:focus,
+.admin-modal-card textarea:focus {
+  border-color: #059669 !important;
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15) !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
 }
 
 .admin-form-row {

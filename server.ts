@@ -317,6 +317,7 @@ async function startServer() {
   });
 
   // Tracked organizers telemetry endpoint
+  // Tracked organizers telemetry endpoint
   app.get("/api/admin/organizers", (_req, res) => {
     res.json({
       success: true,
@@ -325,9 +326,140 @@ async function startServer() {
     });
   });
 
-  // Admin User & Role Management endpoints (Super Admin only)
-  app.get("/api/admin/users", (_req, res) => {
-    const list = Object.entries(registeredAdminsStore).map(([uname, data]) => {
+  // =======================================================
+  // AUDIT LOGS PERSISTENCE & TELEMETRY
+  // =======================================================
+  const AUDIT_LOGS_FILE = path.join(process.cwd(), "data", "audit_logs.json");
+  interface AuditLogEntry {
+    id: string;
+    actor: string;
+    action: string;
+    target: string;
+    timestamp: string;
+    status: "success" | "warning" | "error";
+    ipAddress: string;
+  }
+  let auditLogsStore: AuditLogEntry[] = [];
+
+  function loadAuditLogs() {
+    try {
+      if (fs.existsSync(AUDIT_LOGS_FILE)) {
+        const raw = fs.readFileSync(AUDIT_LOGS_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) auditLogsStore = parsed;
+      }
+    } catch (e) {
+      console.warn("Notice loading audit logs:", e);
+    }
+  }
+
+  function saveAuditLogs() {
+    try {
+      const dataDir = path.dirname(AUDIT_LOGS_FILE);
+      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+      fs.writeFileSync(AUDIT_LOGS_FILE, JSON.stringify(auditLogsStore, null, 2), "utf-8");
+    } catch (e) {
+      console.error("Failed to save audit logs:", e);
+    }
+  }
+
+  function recordAuditLog(
+    actor: string,
+    action: string,
+    target: string,
+    status: "success" | "warning" | "error" = "success",
+    ip = "127.0.0.1"
+  ) {
+    loadAuditLogs();
+    const entry: AuditLogEntry = {
+      id: `LOG-${Date.now().toString().slice(-5)}`,
+      actor: actor || "admin",
+      action,
+      target,
+      timestamp: new Date().toISOString(),
+      status,
+      ipAddress: ip || "127.0.0.1",
+    };
+    auditLogsStore.unshift(entry);
+    if (auditLogsStore.length > 500) auditLogsStore = auditLogsStore.slice(0, 500);
+    saveAuditLogs();
+    return entry;
+  }
+
+  loadAuditLogs();
+
+  // Audit Logs API with server-side pagination & filtering
+  app.get("/api/admin/audit-logs", (req, res) => {
+    loadAuditLogs();
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.max(1, Number(req.query.pageSize) || 10);
+    const search = String(req.query.search || "").toLowerCase().trim();
+    const status = String(req.query.status || "all").toLowerCase().trim();
+
+    let filtered = auditLogsStore;
+    if (search) {
+      filtered = filtered.filter(
+        (l) =>
+          l.actor.toLowerCase().includes(search) ||
+          l.action.toLowerCase().includes(search) ||
+          l.target.toLowerCase().includes(search) ||
+          l.id.toLowerCase().includes(search)
+      );
+    }
+    if (status !== "all") {
+      filtered = filtered.filter((l) => l.status.toLowerCase() === status);
+    }
+
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const startIndex = (page - 1) * pageSize;
+    const paginated = filtered.slice(startIndex, startIndex + pageSize);
+
+    res.json({
+      success: true,
+      logs: paginated,
+      total,
+      page,
+      pageSize,
+      totalPages,
+    });
+  });
+
+  app.post("/api/admin/audit-logs", (req, res) => {
+    const { actor, action, target, status } = req.body || {};
+    if (!action) return res.status(400).json({ success: false, error: "Action is required" });
+    const entry = recordAuditLog(actor || "admin", action, target || "System", status || "success", req.ip || "127.0.0.1");
+    res.json({ success: true, log: entry });
+  });
+
+  app.delete("/api/admin/audit-logs/:id", (req, res) => {
+    const id = req.params.id;
+    loadAuditLogs();
+    const initialLen = auditLogsStore.length;
+    auditLogsStore = auditLogsStore.filter((l) => l.id !== id);
+    saveAuditLogs();
+    res.json({ success: true, removed: initialLen - auditLogsStore.length });
+  });
+
+  app.delete("/api/admin/audit-logs", (_req, res) => {
+    loadAuditLogs();
+    auditLogsStore = [];
+    saveAuditLogs();
+    recordAuditLog("admin123", "Cleared Audit Logs", "All historical audit events wiped", "warning");
+    res.json({ success: true, message: "Audit logs cleared successfully." });
+  });
+
+  // =======================================================
+  // ADMIN USERS & ORGANIZERS API (Server-Side Pagination)
+  // =======================================================
+  app.get("/api/admin/users", (req, res) => {
+    loadAdminsFromDisk();
+    const page = Number(req.query.page);
+    const pageSize = Number(req.query.pageSize);
+    const search = String(req.query.search || "").toLowerCase().trim();
+    const roleFilter = String(req.query.role || "all").toLowerCase().trim();
+
+    let list = Object.entries(registeredAdminsStore).map(([uname, data]) => {
       const tracked = trackedOrganizersStore.find((t) => t.username.toLowerCase() === uname.toLowerCase());
       return {
         username: uname,
@@ -339,7 +471,30 @@ async function startServer() {
         tournamentCount: tracked?.tournamentCount || 0,
       };
     });
-    res.json({ success: true, users: list });
+
+    if (search) {
+      list = list.filter(
+        (u) =>
+          u.username.toLowerCase().includes(search) ||
+          u.name.toLowerCase().includes(search) ||
+          u.email.toLowerCase().includes(search)
+      );
+    }
+    if (roleFilter !== "all") {
+      list = list.filter((u) => u.role.toLowerCase() === roleFilter);
+    }
+
+    const total = list.length;
+    if (page && pageSize) {
+      const safePage = Math.max(1, page);
+      const safePageSize = Math.max(1, pageSize);
+      const totalPages = Math.max(1, Math.ceil(total / safePageSize));
+      const startIndex = (safePage - 1) * safePageSize;
+      const paginated = list.slice(startIndex, startIndex + safePageSize);
+      return res.json({ success: true, users: paginated, total, page: safePage, pageSize: safePageSize, totalPages });
+    }
+
+    res.json({ success: true, users: list, total });
   });
 
   app.post("/api/admin/users", (req, res) => {
@@ -368,6 +523,7 @@ async function startServer() {
       tournamentCount: 0,
     });
     saveAdminsToDisk();
+    recordAuditLog("superadmin", "Created User Account", `${trimmedUser} (${cleanRole})`, "success", req.ip);
     res.json({ success: true, message: `Account created for ${trimmedUser}` });
   });
 
@@ -384,7 +540,6 @@ async function startServer() {
     if (status) (user as any).status = status;
     if (password) user.password = String(password).trim();
 
-    // Update tracked
     const tracked = trackedOrganizersStore.find((t) => t.username.toLowerCase() === username.toLowerCase());
     if (tracked) {
       if (name) tracked.name = name;
@@ -392,6 +547,7 @@ async function startServer() {
       if (role) tracked.role = user.role;
     }
     saveAdminsToDisk();
+    recordAuditLog("superadmin", "Updated User Profile", `${username} (role: ${user.role}, status: ${(user as any).status})`, "success", req.ip);
     res.json({ success: true, message: `Updated user ${username}`, user });
   });
 
@@ -404,9 +560,341 @@ async function startServer() {
     if (user) {
       (user as any).status = (user as any).status === "inactive" ? "active" : "inactive";
       saveAdminsToDisk();
+      recordAuditLog("superadmin", "Changed User Status", `${username} -> ${(user as any).status}`, "warning", req.ip);
       return res.json({ success: true, message: `User status updated to ${(user as any).status}` });
     }
     res.status(404).json({ success: false, error: "User not found" });
+  });
+
+  // =======================================================
+  // PENDING APPROVALS & REGISTRATIONS WORKFLOW API
+  // =======================================================
+  const APPROVALS_FILE = path.join(process.cwd(), "data", "pending_approvals.json");
+  interface PendingRegistration {
+    id: string;
+    teamName: string;
+    tournamentId: number;
+    tournamentName: string;
+    sportName: string;
+    captainName: string;
+    contactPhone: string;
+    email: string;
+    memberCount: number;
+    entryFee: number;
+    paymentStatus: string;
+    status: "pending" | "approved" | "rejected";
+    appliedAt: string;
+    notes?: string;
+  }
+  let pendingApprovalsStore: PendingRegistration[] = [];
+
+  function loadApprovals() {
+    try {
+      if (fs.existsSync(APPROVALS_FILE)) {
+        const raw = fs.readFileSync(APPROVALS_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) pendingApprovalsStore = parsed;
+      } else {
+        pendingApprovalsStore = [];
+        saveApprovals();
+      }
+    } catch (e) {
+      console.warn("Notice loading approvals:", e);
+    }
+  }
+
+  function saveApprovals() {
+    try {
+      const dataDir = path.dirname(APPROVALS_FILE);
+      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+      fs.writeFileSync(APPROVALS_FILE, JSON.stringify(pendingApprovalsStore, null, 2), "utf-8");
+    } catch (e) {
+      console.error("Failed to save approvals:", e);
+    }
+  }
+  loadApprovals();
+
+  app.get("/api/approvals", (req, res) => {
+    loadApprovals();
+    const page = Number(req.query.page);
+    const pageSize = Number(req.query.pageSize);
+    const search = String(req.query.search || "").toLowerCase().trim();
+    const status = String(req.query.status || "all").toLowerCase().trim();
+
+    let filtered = pendingApprovalsStore;
+    if (search) {
+      filtered = filtered.filter(
+        (r) =>
+          r.teamName.toLowerCase().includes(search) ||
+          r.tournamentName.toLowerCase().includes(search) ||
+          r.captainName.toLowerCase().includes(search) ||
+          r.sportName.toLowerCase().includes(search) ||
+          r.id.toLowerCase().includes(search)
+      );
+    }
+    if (status !== "all") {
+      filtered = filtered.filter((r) => r.status.toLowerCase() === status);
+    }
+
+    const total = filtered.length;
+    if (page && pageSize) {
+      const safePage = Math.max(1, page);
+      const safePageSize = Math.max(1, pageSize);
+      const totalPages = Math.max(1, Math.ceil(total / safePageSize));
+      const startIndex = (safePage - 1) * safePageSize;
+      const paginated = filtered.slice(startIndex, startIndex + safePageSize);
+      return res.json({
+        success: true,
+        registrations: paginated,
+        total,
+        page: safePage,
+        pageSize: safePageSize,
+        totalPages,
+      });
+    }
+
+    res.json({ success: true, registrations: filtered, total });
+  });
+
+  app.post("/api/approvals", (req, res) => {
+    const data = req.body || {};
+    if (!data.teamName || !data.tournamentId) {
+      return res.status(400).json({ success: false, error: "Team name and tournament ID are required" });
+    }
+    loadApprovals();
+    const id = `APP-${Date.now().toString().slice(-4)}`;
+    const newReg: PendingRegistration = {
+      id,
+      teamName: String(data.teamName).trim(),
+      tournamentId: Number(data.tournamentId),
+      tournamentName: String(data.tournamentName || `Tournament #${data.tournamentId}`).trim(),
+      sportName: String(data.sportName || "Athletics").trim(),
+      captainName: String(data.captainName || "Team Captain").trim(),
+      contactPhone: String(data.contactPhone || "+91 90000 00000").trim(),
+      email: String(data.email || "team@sportsnest.app").trim(),
+      memberCount: Number(data.memberCount || 11),
+      entryFee: Number(data.entryFee || 0),
+      paymentStatus: String(data.paymentStatus || "Verified Paid"),
+      status: "pending",
+      appliedAt: new Date().toISOString(),
+      notes: data.notes ? String(data.notes).trim() : undefined,
+    };
+    pendingApprovalsStore.unshift(newReg);
+    saveApprovals();
+    recordAuditLog("public_registrant", "Submitted Squad Application", `${newReg.teamName} for ${newReg.tournamentName}`, "success");
+    res.json({ success: true, registration: newReg });
+  });
+
+  app.patch("/api/approvals/:id", (req, res) => {
+    const id = req.params.id;
+    loadApprovals();
+    const index = pendingApprovalsStore.findIndex((r) => r.id === id);
+    if (index === -1) return res.status(404).json({ success: false, error: "Registration not found" });
+
+    const updates = req.body || {};
+    pendingApprovalsStore[index] = {
+      ...pendingApprovalsStore[index],
+      ...(updates.teamName ? { teamName: String(updates.teamName).trim() } : {}),
+      ...(updates.captainName ? { captainName: String(updates.captainName).trim() } : {}),
+      ...(updates.contactPhone ? { contactPhone: String(updates.contactPhone).trim() } : {}),
+      ...(updates.email ? { email: String(updates.email).trim() } : {}),
+      ...(updates.memberCount ? { memberCount: Number(updates.memberCount) } : {}),
+      ...(updates.notes !== undefined ? { notes: String(updates.notes).trim() } : {}),
+      ...(updates.status ? { status: updates.status } : {}),
+    };
+    saveApprovals();
+    recordAuditLog("admin", "Updated Application", `${pendingApprovalsStore[index].teamName}`, "success");
+    res.json({ success: true, registration: pendingApprovalsStore[index] });
+  });
+
+  app.post("/api/approvals/:id/approve", (req, res) => {
+    const id = req.params.id;
+    loadApprovals();
+    const index = pendingApprovalsStore.findIndex((r) => r.id === id);
+    if (index === -1) return res.status(404).json({ success: false, error: "Registration not found" });
+
+    pendingApprovalsStore[index].status = "approved";
+    saveApprovals();
+
+    // Also add to teams store if not already added
+    loadTeams();
+    const reg = pendingApprovalsStore[index];
+    const teamExists = teamsRegistryStore.some((t) => t.name.toLowerCase() === reg.teamName.toLowerCase() && t.tournamentId === reg.tournamentId);
+    if (!teamExists) {
+      teamsRegistryStore.unshift({
+        id: Date.now() % 1000000,
+        name: reg.teamName,
+        tournamentId: reg.tournamentId,
+        tournamentName: reg.tournamentName,
+        group: "A",
+        members: reg.memberCount,
+        createdAt: new Date().toISOString(),
+      });
+      saveTeams();
+    }
+
+    recordAuditLog("admin", "Approved Squad Registration", `${reg.teamName} for ${reg.tournamentName}`, "success", req.ip);
+    res.json({ success: true, message: `Registration approved for ${reg.teamName}` });
+  });
+
+  app.post("/api/approvals/:id/reject", (req, res) => {
+    const id = req.params.id;
+    const { reason } = req.body || {};
+    loadApprovals();
+    const index = pendingApprovalsStore.findIndex((r) => r.id === id);
+    if (index === -1) return res.status(404).json({ success: false, error: "Registration not found" });
+
+    pendingApprovalsStore[index].status = "rejected";
+    if (reason) pendingApprovalsStore[index].notes = `Rejected: ${reason}`;
+    saveApprovals();
+
+    recordAuditLog("admin", "Rejected Squad Registration", `${pendingApprovalsStore[index].teamName}: ${reason || "No reason given"}`, "warning", req.ip);
+    res.json({ success: true, message: `Registration rejected for ${pendingApprovalsStore[index].teamName}` });
+  });
+
+  app.delete("/api/approvals/:id", (req, res) => {
+    const id = req.params.id;
+    loadApprovals();
+    const beforeLen = pendingApprovalsStore.length;
+    pendingApprovalsStore = pendingApprovalsStore.filter((r) => r.id !== id);
+    saveApprovals();
+    recordAuditLog("admin", "Deleted Registration Entry", id, "warning", req.ip);
+    res.json({ success: true, removedCount: beforeLen - pendingApprovalsStore.length });
+  });
+
+  // =======================================================
+  // TEAMS REGISTRY API (Server-Side Pagination & CRUD)
+  // =======================================================
+  const TEAMS_FILE = path.join(process.cwd(), "data", "teams_registry.json");
+  interface TeamRecord {
+    id: number;
+    name: string;
+    tournamentId: number;
+    tournamentName?: string;
+    group: string;
+    members: number;
+    createdAt?: string;
+  }
+  let teamsRegistryStore: TeamRecord[] = [];
+
+  function loadTeams() {
+    try {
+      if (fs.existsSync(TEAMS_FILE)) {
+        const raw = fs.readFileSync(TEAMS_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) teamsRegistryStore = parsed;
+      } else {
+        teamsRegistryStore = [];
+        saveTeams();
+      }
+    } catch (e) {
+      console.warn("Notice loading teams registry:", e);
+    }
+  }
+
+  function saveTeams() {
+    try {
+      const dataDir = path.dirname(TEAMS_FILE);
+      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+      fs.writeFileSync(TEAMS_FILE, JSON.stringify(teamsRegistryStore, null, 2), "utf-8");
+    } catch (e) {
+      console.error("Failed to save teams registry:", e);
+    }
+  }
+  loadTeams();
+
+  app.get("/api/teams", (req, res) => {
+    loadTeams();
+    const page = Number(req.query.page);
+    const pageSize = Number(req.query.pageSize);
+    const search = String(req.query.search || "").toLowerCase().trim();
+    const tournamentId = req.query.tournamentId;
+
+    let filtered = teamsRegistryStore;
+    if (tournamentId && tournamentId !== "all") {
+      filtered = filtered.filter((t) => String(t.tournamentId) === String(tournamentId));
+    }
+    if (search) {
+      filtered = filtered.filter(
+        (t) =>
+          t.name.toLowerCase().includes(search) ||
+          (t.tournamentName && t.tournamentName.toLowerCase().includes(search)) ||
+          t.group.toLowerCase().includes(search)
+      );
+    }
+
+    const total = filtered.length;
+    if (page && pageSize) {
+      const safePage = Math.max(1, page);
+      const safePageSize = Math.max(1, pageSize);
+      const totalPages = Math.max(1, Math.ceil(total / safePageSize));
+      const startIndex = (safePage - 1) * safePageSize;
+      const paginated = filtered.slice(startIndex, startIndex + safePageSize);
+      return res.json({
+        success: true,
+        teams: paginated,
+        total,
+        page: safePage,
+        pageSize: safePageSize,
+        totalPages,
+      });
+    }
+
+    res.json({ success: true, teams: filtered, total });
+  });
+
+  app.post("/api/teams", (req, res) => {
+    const { name, tournamentId, tournamentName, group, members } = req.body || {};
+    if (!name || !tournamentId) {
+      return res.status(400).json({ success: false, error: "Team name and tournament ID required" });
+    }
+    loadTeams();
+    const newTeam: TeamRecord = {
+      id: Date.now() % 1000000,
+      name: String(name).trim(),
+      tournamentId: Number(tournamentId),
+      tournamentName: tournamentName ? String(tournamentName).trim() : `Tournament #${tournamentId}`,
+      group: String(group || "A").trim().toUpperCase(),
+      members: Number(members || 11),
+      createdAt: new Date().toISOString(),
+    };
+    teamsRegistryStore.unshift(newTeam);
+    saveTeams();
+    recordAuditLog("admin", "Added Team", `${newTeam.name} to ${newTeam.tournamentName}`, "success", req.ip);
+    res.json({ success: true, team: newTeam });
+  });
+
+  app.put("/api/teams/:id", (req, res) => {
+    const id = Number(req.params.id);
+    loadTeams();
+    const index = teamsRegistryStore.findIndex((t) => t.id === id);
+    if (index === -1) return res.status(404).json({ success: false, error: "Team not found" });
+
+    const { name, group, members, tournamentId, tournamentName } = req.body || {};
+    teamsRegistryStore[index] = {
+      ...teamsRegistryStore[index],
+      ...(name ? { name: String(name).trim() } : {}),
+      ...(group ? { group: String(group).trim().toUpperCase() } : {}),
+      ...(members !== undefined ? { members: Number(members) } : {}),
+      ...(tournamentId ? { tournamentId: Number(tournamentId) } : {}),
+      ...(tournamentName ? { tournamentName: String(tournamentName).trim() } : {}),
+    };
+    saveTeams();
+    recordAuditLog("admin", "Edited Team Roster", `${teamsRegistryStore[index].name}`, "success", req.ip);
+    res.json({ success: true, team: teamsRegistryStore[index] });
+  });
+
+  app.delete("/api/teams/:id", (req, res) => {
+    const id = Number(req.params.id);
+    loadTeams();
+    const existing = teamsRegistryStore.find((t) => t.id === id);
+    const beforeLen = teamsRegistryStore.length;
+    teamsRegistryStore = teamsRegistryStore.filter((t) => t.id !== id);
+    saveTeams();
+    if (existing) {
+      recordAuditLog("admin", "Disqualified/Removed Team", `${existing.name}`, "warning", req.ip);
+    }
+    res.json({ success: true, removedCount: beforeLen - teamsRegistryStore.length });
   });
 
   // =======================================================
@@ -455,11 +943,51 @@ async function startServer() {
 
   app.get("/api/sports", (req, res) => {
     loadCustomSportsFromDisk();
-    res.json({ success: true, sports: customSportsStore, deleted: deletedSportsStore });
+    const page = Number(req.query.page);
+    const pageSize = Number(req.query.pageSize);
+    const search = String(req.query.search || "").toLowerCase().trim();
+    const category = String(req.query.category || "all").toLowerCase().trim();
+
+    let list = customSportsStore.filter(
+      (s) => !deletedSportsStore.some((d) => d.toLowerCase() === s.name.toLowerCase() || d === String(s.id))
+    );
+
+    if (search) {
+      list = list.filter(
+        (s) =>
+          s.name.toLowerCase().includes(search) ||
+          (s.groundName && s.groundName.toLowerCase().includes(search)) ||
+          (s.format && s.format.toLowerCase().includes(search)) ||
+          (s.category && s.category.toLowerCase().includes(search))
+      );
+    }
+    if (category !== "all") {
+      list = list.filter((s) => s.category && s.category.toLowerCase() === category);
+    }
+
+    const total = list.length;
+    if (page && pageSize) {
+      const safePage = Math.max(1, page);
+      const safePageSize = Math.max(1, pageSize);
+      const totalPages = Math.max(1, Math.ceil(total / safePageSize));
+      const startIndex = (safePage - 1) * safePageSize;
+      const paginated = list.slice(startIndex, startIndex + safePageSize);
+      return res.json({
+        success: true,
+        sports: paginated,
+        total,
+        page: safePage,
+        pageSize: safePageSize,
+        totalPages,
+        deleted: deletedSportsStore,
+      });
+    }
+
+    res.json({ success: true, sports: customSportsStore, deleted: deletedSportsStore, total });
   });
 
   app.post("/api/sports", (req, res) => {
-    const { name, groundName, surface, format, rules, description, accentColor } = req.body || {};
+    const { name, groundName, surface, format, rules, description, accentColor, category } = req.body || {};
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, error: "Sport name is required." });
     }
@@ -484,6 +1012,7 @@ async function startServer() {
       groundName: (groundName || "").trim() || `${cleanName} Arena`,
       surface: (surface || "").trim() || "Natural / Synthetic",
       format: (format || "").trim() || "Standard Competition",
+      category: (category || "Arena").trim(),
       rules: (rules || "").trim() || "Standard Official Rules",
       description: (description || "").trim() || `Official competition discipline for ${cleanName}.`,
       accentColor: accentColor || "#10b981",
@@ -493,6 +1022,7 @@ async function startServer() {
 
     customSportsStore.push(newSport);
     saveCustomSportsToDisk();
+    recordAuditLog("admin", "Created Sport Discipline", `${cleanName} (ID: ${nextId})`, "success", req.ip);
 
     console.log(`[Backend Sports] New sport added: ${cleanName} (ID: ${nextId})`);
     res.json({ success: true, data: newSport, message: `Sport "${cleanName}" saved successfully.` });
@@ -501,7 +1031,7 @@ async function startServer() {
   // Update sport details
   app.patch("/api/sports/:id", (req, res) => {
     const target = req.params.id;
-    const { groundName, surface, format, rules, description, accentColor, name } = req.body || {};
+    const { groundName, surface, format, rules, description, accentColor, name, category } = req.body || {};
     loadCustomSportsFromDisk();
 
     const index = customSportsStore.findIndex(
@@ -516,12 +1046,14 @@ async function startServer() {
         groundName: groundName !== undefined ? groundName.trim() : existing.groundName,
         surface: surface !== undefined ? surface.trim() : existing.surface,
         format: format !== undefined ? format.trim() : existing.format,
+        category: category !== undefined ? category.trim() : existing.category,
         rules: rules !== undefined ? rules.trim() : existing.rules,
         description: description !== undefined ? description.trim() : existing.description,
         accentColor: accentColor || existing.accentColor,
         updatedAt: new Date().toISOString(),
       };
       saveCustomSportsToDisk();
+      recordAuditLog("admin", "Updated Sport Discipline", `${customSportsStore[index].name}`, "success", req.ip);
       return res.json({ success: true, data: customSportsStore[index] });
     } else {
       // If it was a base sport, add it to customSportsStore with the customized details!
@@ -533,6 +1065,7 @@ async function startServer() {
         groundName: groundName?.trim() || `${cleanName} Arena`,
         surface: surface?.trim() || "Natural / Synthetic",
         format: format?.trim() || "Standard Competition",
+        category: category?.trim() || "Arena",
         rules: rules?.trim() || "Standard Official Rules",
         description: description?.trim() || `Sanctioned competition discipline for ${cleanName}.`,
         accentColor: accentColor || "#10b981",
@@ -540,6 +1073,7 @@ async function startServer() {
       };
       customSportsStore.push(newOverride);
       saveCustomSportsToDisk();
+      recordAuditLog("admin", "Updated Sport Discipline", `${cleanName}`, "success", req.ip);
       return res.json({ success: true, data: newOverride });
     }
   });
@@ -569,6 +1103,7 @@ async function startServer() {
     });
 
     saveCustomSportsToDisk();
+    recordAuditLog("admin", "Deleted Sport Discipline", `${targetName || target}`, "warning", req.ip);
     console.log(`[Backend Sports] Sport removed: ${target} / ${targetName}. Store size: ${customSportsStore.length}`);
     res.json({ success: true, removedCount: beforeLen - customSportsStore.length });
   });

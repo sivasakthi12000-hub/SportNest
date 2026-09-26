@@ -17,6 +17,13 @@ import {
   Clock,
   Sparkles,
   ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Table as TableIcon,
+  LayoutGrid,
+  BookOpen,
 } from "lucide-react";
 import {
   Sport,
@@ -25,6 +32,7 @@ import {
   deleteSport,
   updateSport,
 } from "../../services/dataService";
+import { WysiwygEditor } from "../WysiwygEditor";
 
 interface AdminSportsViewProps {
   sports: Sport[];
@@ -54,7 +62,9 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
   const [activeTab, setActiveTab] = useState<"tournaments" | "details">("tournaments");
   const [newlyAddedSportId, setNewlyAddedSportId] = useState<number | null>(null);
 
-  const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [displayMode, setDisplayMode] = useState<"table" | "grid">("table");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
 
   const hasMySports = !!(relevantSportIds && relevantSportIds.size > 0);
   const isOrganizer = userRole !== "superadmin";
@@ -72,6 +82,7 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
   const [groundName, setGroundName] = useState("");
   const [surface, setSurface] = useState("");
   const [format, setFormat] = useState("");
+  const [category, setCategory] = useState("");
   const [rules, setRules] = useState("");
   const [description, setDescription] = useState("");
   const [accentColor, setAccentColor] = useState("#10b981");
@@ -81,6 +92,7 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
   const [editGroundName, setEditGroundName] = useState("");
   const [editSurface, setEditSurface] = useState("");
   const [editFormat, setEditFormat] = useState("");
+  const [editCategory, setEditCategory] = useState("");
   const [editRules, setEditRules] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editAccentColor, setEditAccentColor] = useState("#10b981");
@@ -98,6 +110,7 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
     setEditGroundName(sport.groundName || "");
     setEditSurface(sport.surface || "");
     setEditFormat(sport.format || "");
+    setEditCategory(sport.category || "");
     setEditRules(sport.rules || "");
     setEditDescription(sport.description || "");
     setEditAccentColor(sport.accentColor || "#10b981");
@@ -231,6 +244,23 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
     );
   });
 
+  // Pagination calculation
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filtered.length);
+  const paginatedSports = filtered.slice(startIndex, endIndex);
+
+  const handleSearchChange = (val: string) => {
+    setSearchTerm(val);
+    setCurrentPage(1);
+  };
+
+  const handlePageSizeChange = (val: number) => {
+    setPageSize(val);
+    setCurrentPage(1);
+  };
+
   // Tournaments for currently selected sport
   const getSportTournaments = (sport: Sport) => {
     return tournaments.filter(
@@ -322,7 +352,7 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
               type="text"
               placeholder="Search sports or grounds..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               style={{
                 border: "none",
                 outline: "none",
@@ -331,6 +361,51 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
                 background: "transparent",
               }}
             />
+          </div>
+
+          <div style={{ display: "inline-flex", background: "#f1f5f9", borderRadius: "8px", padding: "3px" }}>
+            <button
+              type="button"
+              onClick={() => setDisplayMode("table")}
+              style={{
+                padding: "6px 10px",
+                borderRadius: "6px",
+                border: "none",
+                background: displayMode === "table" ? "#ffffff" : "transparent",
+                color: displayMode === "table" ? "#0f172a" : "#64748b",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                fontSize: "0.82rem",
+                fontWeight: 700,
+                boxShadow: displayMode === "table" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+              }}
+            >
+              <TableIcon size={14} />
+              <span>Table</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDisplayMode("grid")}
+              style={{
+                padding: "6px 10px",
+                borderRadius: "6px",
+                border: "none",
+                background: displayMode === "grid" ? "#ffffff" : "transparent",
+                color: displayMode === "grid" ? "#0f172a" : "#64748b",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                fontSize: "0.82rem",
+                fontWeight: 700,
+                boxShadow: displayMode === "grid" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+              }}
+            >
+              <LayoutGrid size={14} />
+              <span>Grid</span>
+            </button>
           </div>
 
           <button
@@ -409,6 +484,250 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
             <Plus size={16} />
             <span>Add "{searchTerm}" Sport</span>
           </button>
+        </div>
+      ) : displayMode === "table" ? (
+        <div className="admin-data-card" style={{ padding: 0, overflow: "hidden", border: "1px solid #e2e8f0" }}>
+          <div className="admin-table-wrapper" style={{ overflowX: "auto" }}>
+            <table className="admin-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
+                  <th style={{ padding: "12px 14px", textAlign: "left", minWidth: "190px" }}>Discipline & Category</th>
+                  <th style={{ padding: "12px 14px", textAlign: "left", minWidth: "160px" }}>Default Arena / Ground</th>
+                  <th style={{ padding: "12px 14px", textAlign: "left", minWidth: "150px" }}>Surface & Format</th>
+                  <th style={{ padding: "12px 14px", textAlign: "left", minWidth: "220px" }}>Specifications & Rules</th>
+                  <th style={{ padding: "12px 14px", textAlign: "center", minWidth: "110px" }}>Tournaments</th>
+                  <th style={{ padding: "12px 14px", textAlign: "right", minWidth: "140px" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedSports.map((s) => {
+                  const sportTourneys = getSportTournaments(s);
+                  const isJustAdded = newlyAddedSportId === s.id;
+                  return (
+                    <tr key={s.id} style={{ borderBottom: "1px solid #f1f5f9", background: isJustAdded ? "#f0fdf4" : undefined }}>
+                      <td style={{ padding: "12px 14px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                          <span
+                            style={{
+                              width: "10px",
+                              height: "10px",
+                              borderRadius: "50%",
+                              background: s.accentColor || "#10b981",
+                              display: "inline-block",
+                              flexShrink: 0,
+                            }}
+                          />
+                          <div>
+                            <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.92rem", display: "block" }}>
+                              {s.name}
+                            </span>
+                            <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                              {s.category || "Arena Sport"} • ID #{s.id}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td style={{ padding: "12px 14px" }}>
+                        <span style={{ fontSize: "0.85rem", color: "#334155", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                          <MapPin size={12} color="#059669" />
+                          {s.groundName || "Official Arena"}
+                        </span>
+                      </td>
+
+                      <td style={{ padding: "12px 14px" }}>
+                        <div style={{ fontSize: "0.82rem", color: "#475569" }}>
+                          <div style={{ fontWeight: 600, color: "#1e293b" }}>{s.format || "Standard Match"}</div>
+                          <div style={{ fontSize: "0.75rem", color: "#64748b" }}>{s.surface || "Natural / Synthetic"}</div>
+                        </div>
+                      </td>
+
+                      <td style={{ padding: "12px 14px" }}>
+                        <div
+                          style={{
+                            fontSize: "0.8rem",
+                            color: "#64748b",
+                            maxHeight: "2.8em",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                          }}
+                          dangerouslySetInnerHTML={{ __html: s.rules || s.description || "Official regulations apply." }}
+                        />
+                      </td>
+
+                      <td style={{ padding: "12px 14px", textAlign: "center" }}>
+                        <span
+                          style={{
+                            display: "inline-block",
+                            padding: "2px 8px",
+                            borderRadius: "999px",
+                            background: sportTourneys.length > 0 ? "#ecfdf5" : "#f1f5f9",
+                            color: sportTourneys.length > 0 ? "#065f46" : "#64748b",
+                            fontWeight: 700,
+                            fontSize: "0.8rem",
+                          }}
+                        >
+                          {sportTourneys.length} Active
+                        </span>
+                      </td>
+
+                      <td style={{ padding: "12px 14px", textAlign: "right" }}>
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenSportDetails(s, "details")}
+                            className="admin-btn-icon"
+                            title="Edit Discipline Specifications"
+                            style={{
+                              background: "#f0fdf4",
+                              border: "1px solid #bbf7d0",
+                              color: "#15803d",
+                              padding: "6px",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <Edit3 size={14} />
+                          </button>
+
+                          {onOpenCreateTournament && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenCreateTournament(s.name)}
+                              className="admin-btn-icon"
+                              title={`Host Tournament for ${s.name}`}
+                              style={{
+                                background: "#eff6ff",
+                                border: "1px solid #bfdbfe",
+                                color: "#1d4ed8",
+                                padding: "6px",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <Plus size={14} />
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => setSportToDelete(s)}
+                            className="admin-btn-icon"
+                            title="Delete Sport Discipline"
+                            style={{
+                              background: "#fef2f2",
+                              border: "1px solid #fecaca",
+                              color: "#b91c1c",
+                              padding: "6px",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Server-Side Pagination Footer for Table */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "1rem",
+              padding: "1rem 1.25rem",
+              background: "#f8fafc",
+              borderTop: "1px solid #e2e8f0",
+              fontSize: "0.85rem",
+              color: "#475569",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span>Rows per page:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: "6px",
+                    border: "1px solid #cbd5e1",
+                    background: "#ffffff",
+                    fontSize: "0.85rem",
+                    fontWeight: 600,
+                    color: "#0f172a",
+                  }}
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+
+              <div>
+                Showing{" "}
+                <strong>
+                  {filtered.length === 0 ? 0 : startIndex + 1}–{endIndex}
+                </strong>{" "}
+                of <strong>{filtered.length}</strong> disciplines
+              </div>
+            </div>
+
+            {totalPages > 1 && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={safeCurrentPage === 1}
+                  title="First Page"
+                  style={paginationBtnStyle(safeCurrentPage === 1)}
+                >
+                  <ChevronsLeft size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={safeCurrentPage === 1}
+                  title="Previous Page"
+                  style={paginationBtnStyle(safeCurrentPage === 1)}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <span style={{ padding: "0 0.5rem", fontWeight: 700, color: "#0f172a" }}>
+                  Page {safeCurrentPage} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={safeCurrentPage >= totalPages}
+                  title="Next Page"
+                  style={paginationBtnStyle(safeCurrentPage >= totalPages)}
+                >
+                  <ChevronRight size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={safeCurrentPage >= totalPages}
+                  title="Last Page"
+                  style={paginationBtnStyle(safeCurrentPage >= totalPages)}
+                >
+                  <ChevronsRight size={16} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <div
@@ -1086,19 +1405,19 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
 
                     <div className="admin-form-group">
                       <label style={{ fontSize: "0.82rem", fontWeight: 700, color: "#334155" }}>
-                        Accent Brand Color
+                        Discipline Category
                       </label>
                       <input
-                        type="color"
-                        value={editAccentColor}
-                        onChange={(e) => setEditAccentColor(e.target.value)}
+                        type="text"
+                        placeholder="e.g. Field Sports / Racquet / Team"
+                        value={editCategory}
+                        onChange={(e) => setEditCategory(e.target.value)}
                         style={{
-                          height: "40px",
                           width: "100%",
-                          padding: "0.2rem",
-                          cursor: "pointer",
-                          borderRadius: "8px",
+                          padding: "0.55rem 0.75rem",
                           border: "1px solid #cbd5e1",
+                          borderRadius: "8px",
+                          fontSize: "0.85rem",
                         }}
                       />
                     </div>
@@ -1124,21 +1443,16 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
                   </div>
 
                   <div className="admin-form-group" style={{ marginTop: "1rem" }}>
-                    <label style={{ fontSize: "0.82rem", fontWeight: 700, color: "#334155" }}>
-                      Key Regulations & Rules
+                    <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.82rem", fontWeight: 700, color: "#334155", marginBottom: "0.35rem" }}>
+                      <BookOpen size={14} color="#059669" />
+                      <span>Discipline Specifications & Rules (WYSIWYG Kitchen Sink)</span>
                     </label>
-                    <textarea
-                      rows={3}
-                      placeholder="e.g. Standard FIFA rules apply. Yellow card accumulation rules enforced..."
+                    <WysiwygEditor
+                      id="edit-sport-rules"
                       value={editRules}
-                      onChange={(e) => setEditRules(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "0.55rem 0.75rem",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: "8px",
-                        fontSize: "0.85rem",
-                      }}
+                      onChange={setEditRules}
+                      placeholder="Official sanctioned rules, timing, field dimensions, gear, and penalty criteria..."
+                      minHeight="140px"
                     />
                   </div>
 
@@ -1285,19 +1599,19 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
 
                   <div className="admin-form-group">
                     <label style={{ fontSize: "0.82rem", fontWeight: 700, color: "#334155" }}>
-                      Accent Brand Color
+                      Discipline Category
                     </label>
                     <input
-                      type="color"
-                      value={accentColor}
-                      onChange={(e) => setAccentColor(e.target.value)}
+                      type="text"
+                      placeholder="e.g. Field Sports / Racquet / Team"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
                       style={{
-                        height: "40px",
                         width: "100%",
-                        padding: "0.2rem",
-                        cursor: "pointer",
-                        borderRadius: "8px",
+                        padding: "0.55rem 0.75rem",
                         border: "1px solid #cbd5e1",
+                        borderRadius: "8px",
+                        fontSize: "0.85rem",
                       }}
                     />
                   </div>
@@ -1323,21 +1637,16 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
                 </div>
 
                 <div className="admin-form-group" style={{ marginTop: "1rem" }}>
-                  <label style={{ fontSize: "0.82rem", fontWeight: 700, color: "#334155" }}>
-                    Key Rules or Regulation Summaries
+                  <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.82rem", fontWeight: 700, color: "#334155", marginBottom: "0.35rem" }}>
+                    <BookOpen size={14} color="#059669" />
+                    <span>Discipline Specifications & Rules (WYSIWYG Kitchen Sink)</span>
                   </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Key regulation guidelines..."
+                  <WysiwygEditor
+                    id="add-sport-rules"
                     value={rules}
-                    onChange={(e) => setRules(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "0.55rem 0.75rem",
-                      border: "1px solid #cbd5e1",
-                      borderRadius: "8px",
-                      fontSize: "0.85rem",
-                    }}
+                    onChange={setRules}
+                    placeholder="Official sanctioned rules, timing, field dimensions, gear, and penalty criteria..."
+                    minHeight="140px"
                   />
                 </div>
               </div>

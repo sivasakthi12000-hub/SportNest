@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { MapPin, Navigation, ExternalLink } from "lucide-react";
+import { MapPin, Navigation, ExternalLink, BookOpen } from "lucide-react";
 import { getTournamentById, getSports, getTeamsByTournamentId } from "../services/dataService";
 import "../styles/tournament.css";
 
@@ -122,6 +122,37 @@ const TournamentDetails = () => {
           <h3>About</h3>
           <p>{tournament.description}</p>
         </div>
+
+        {/* Discipline Specifications & Rules - ONLY SHOWN IF ENTERED IN ADD/CREATE TOURNAMENT */}
+        {tournament.rules && tournament.rules.trim() && (
+          <div
+            className="discipline-rules-section"
+            style={{
+              marginTop: "1.5rem",
+              background: "rgba(15, 23, 42, 0.75)",
+              border: "1px solid rgba(56, 189, 248, 0.3)",
+              borderRadius: "12px",
+              padding: "1.25rem 1.5rem",
+              boxShadow: "0 4px 15px rgba(0, 0, 0, 0.3)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.85rem" }}>
+              <BookOpen size={20} style={{ color: "#38bdf8" }} />
+              <h3 style={{ margin: 0, fontSize: "1.1rem", color: "#f8fafc", fontWeight: 700 }}>
+                Discipline Specifications & Rules
+              </h3>
+            </div>
+            <div
+              className="rules-rich-content"
+              style={{
+                color: "#e2e8f0",
+                lineHeight: 1.7,
+                fontSize: "0.92rem",
+              }}
+              dangerouslySetInnerHTML={{ __html: tournament.rules }}
+            />
+          </div>
+        )}
 
         {/* Venue Location & Pinned Google Map */}
         {(tournament.mapUrl || (tournament.groundName && tournament.district)) && (

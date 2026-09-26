@@ -20,6 +20,7 @@ import Bracket from "./pages/Bracket";
 import AddTournament from "./pages/AddTournament";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import Profile from "./pages/Profile";
 
 export default function App() {
   return (
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/admin" element={<Dashboard />} />
+            <Route path="/profile" element={<Profile />} />
           </Routes>
         </ErrorBoundary>
       </AuthProvider>
