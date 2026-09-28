@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
+import React, { useEffect } from "react";
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
 import Navbar from "./components/Navbar";
@@ -22,11 +23,36 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
 
+/**
+ * SessionRouteRestorer:
+ * Prevents unwanted redirection to the home screen when reloading inside an admin session.
+ * If user is authenticated and reloads while on /dashboard, this immediately restores the dashboard view.
+ */
+function SessionRouteRestorer() {
+  const { isAuthenticated } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (location.pathname === "/") {
+      const activeAdminSession = localStorage.getItem("sportsnest_active_admin_session");
+      const deliberateHome = sessionStorage.getItem("sportsnest_deliberate_home");
+
+      if (isAuthenticated && activeAdminSession === "true" && !deliberateHome) {
+        navigate("/dashboard", { replace: true });
+      }
+    }
+  }, [location.pathname, isAuthenticated, navigate]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <Router>
       <AuthProvider>
         <ErrorBoundary>
+          <SessionRouteRestorer />
           <Navbar />
           <Routes>
             <Route path="/" element={<Home />} />

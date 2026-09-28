@@ -97,6 +97,20 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
   const [editDescription, setEditDescription] = useState("");
   const [editAccentColor, setEditAccentColor] = useState("#10b981");
   const [updatingSport, setUpdatingSport] = useState(false);
+  const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+
+  const paginationBtnStyle = (disabled: boolean): React.CSSProperties => ({
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "32px",
+    height: "32px",
+    borderRadius: "6px",
+    border: "1px solid #cbd5e1",
+    background: disabled ? "#f8fafc" : "#ffffff",
+    color: disabled ? "#94a3b8" : "#334155",
+    cursor: disabled ? "not-allowed" : "pointer",
+  });
 
   const showToast = (text: string, type: "success" | "error") => {
     setMessage({ text, type });

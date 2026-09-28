@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, ArrowRight, Users, Trophy, Shield, Activity, Sparkles, MapPin } from "lucide-react";
 import { getTournaments } from "../services/dataService";
 import { getSportCinematicMeta } from "../utils/visualTheme";
+import { SportPitchCard } from "./SportPitchCard";
 import "../styles/sport-showcase.css";
 
 export interface SportItem {
@@ -30,6 +31,7 @@ const ALL_SPORTS_HERO_IMAGE =
 
 export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
   sports,
+  showAllGroundsGrid = true,
 }) => {
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState("");

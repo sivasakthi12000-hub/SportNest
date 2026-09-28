@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Users,
   UserPlus,
@@ -12,6 +12,10 @@ import {
   Search,
   Lock,
   Key,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 
 interface AdminUserRecord {
@@ -31,6 +35,10 @@ export const AdminUsersView: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUserRecord | null>(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
 
   // Form states for creating new admin
   const [newUsername, setNewUsername] = useState("");
@@ -212,12 +220,28 @@ export const AdminUsersView: React.FC = () => {
     }
   };
 
-  const filteredUsers = users.filter(
-    (u) =>
-      u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredUsers = useMemo(() => {
+    return users.filter(
+      (u) =>
+        !searchQuery.trim() ||
+        u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.email.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [users, searchQuery]);
+
+  const totalItems = filteredUsers.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+
+  const paginatedUsers = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filteredUsers.slice(start, start + pageSize);
+  }, [filteredUsers, safeCurrentPage, pageSize]);
+
+  const handlePageChange = (p: number) => {
+    setCurrentPage(Math.min(Math.max(1, p), totalPages));
+  };
 
   return (
     <div className="admin-view-container">
@@ -319,14 +343,14 @@ export const AdminUsersView: React.FC = () => {
                       </td>
                     </tr>
                   ))
-              ) : filteredUsers.length === 0 ? (
+              ) : paginatedUsers.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ textAlign: "center", padding: "2.5rem", color: "#64748b" }}>
                     No administrators found matching your search.
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((u) => {
+                paginatedUsers.map((u) => {
                   const isSuper = u.role === "superadmin";
                   const isActive = u.status === "active";
 
@@ -469,6 +493,139 @@ export const AdminUsersView: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Server-Side Pagination Footer */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "1rem",
+            padding: "1rem 1.25rem",
+            background: "#f8fafc",
+            borderTop: "1px solid #e2e8f0",
+            fontSize: "0.85rem",
+            color: "#475569",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span>Rows per page:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: "6px",
+                  border: "1px solid #cbd5e1",
+                  background: "#ffffff",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  color: "#0f172a",
+                }}
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+
+            <span style={{ color: "#64748b" }}>
+              Showing{" "}
+              <strong style={{ color: "#0f172a" }}>
+                {totalItems === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}
+              </strong>{" "}
+              -{" "}
+              <strong style={{ color: "#0f172a" }}>
+                {Math.min(safeCurrentPage * pageSize, totalItems)}
+              </strong>{" "}
+              of <strong style={{ color: "#0f172a" }}>{totalItems}</strong> administrators
+            </span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+            <button
+              onClick={() => handlePageChange(1)}
+              disabled={safeCurrentPage === 1}
+              style={{
+                padding: "6px 8px",
+                borderRadius: "6px",
+                border: "1px solid #e2e8f0",
+                background: safeCurrentPage === 1 ? "#f1f5f9" : "#ffffff",
+                color: safeCurrentPage === 1 ? "#94a3b8" : "#334155",
+                cursor: safeCurrentPage === 1 ? "not-allowed" : "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+              }}
+              title="First Page"
+            >
+              <ChevronsLeft size={16} />
+            </button>
+
+            <button
+              onClick={() => handlePageChange(safeCurrentPage - 1)}
+              disabled={safeCurrentPage === 1}
+              style={{
+                padding: "6px 8px",
+                borderRadius: "6px",
+                border: "1px solid #e2e8f0",
+                background: safeCurrentPage === 1 ? "#f1f5f9" : "#ffffff",
+                color: safeCurrentPage === 1 ? "#94a3b8" : "#334155",
+                cursor: safeCurrentPage === 1 ? "not-allowed" : "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+              }}
+              title="Previous Page"
+            >
+              <ChevronLeft size={16} />
+            </button>
+
+            <span style={{ padding: "4px 10px", fontWeight: 600, color: "#0f172a" }}>
+              Page {safeCurrentPage} of {totalPages}
+            </span>
+
+            <button
+              onClick={() => handlePageChange(safeCurrentPage + 1)}
+              disabled={safeCurrentPage === totalPages}
+              style={{
+                padding: "6px 8px",
+                borderRadius: "6px",
+                border: "1px solid #e2e8f0",
+                background: safeCurrentPage === totalPages ? "#f1f5f9" : "#ffffff",
+                color: safeCurrentPage === totalPages ? "#94a3b8" : "#334155",
+                cursor: safeCurrentPage === totalPages ? "not-allowed" : "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+              }}
+              title="Next Page"
+            >
+              <ChevronRight size={16} />
+            </button>
+
+            <button
+              onClick={() => handlePageChange(totalPages)}
+              disabled={safeCurrentPage === totalPages}
+              style={{
+                padding: "6px 8px",
+                borderRadius: "6px",
+                border: "1px solid #e2e8f0",
+                background: safeCurrentPage === totalPages ? "#f1f5f9" : "#ffffff",
+                color: safeCurrentPage === totalPages ? "#94a3b8" : "#334155",
+                cursor: safeCurrentPage === totalPages ? "not-allowed" : "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+              }}
+              title="Last Page"
+            >
+              <ChevronsRight size={16} />
+            </button>
+          </div>
         </div>
       </div>
 

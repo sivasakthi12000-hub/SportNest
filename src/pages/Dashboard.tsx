@@ -106,6 +106,8 @@ const Dashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [chartYear, setChartYear] = useState("2026");
+  const [chartType, setChartType] = useState<"bar" | "area">("bar");
+  const [nowTick, setNowTick] = useState<number>(Date.now());
   const [selectedMenu, setSelectedMenu] = useState("dashboard");
   const [activeBarIndex, setActiveBarIndex] = useState<number>(7);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -115,8 +117,29 @@ const Dashboard: React.FC = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [hasUnreadNotifs, setHasUnreadNotifs] = useState(true);
   const [roleNotice, setRoleNotice] = useState<string | null>(null);
+  const [matchesQueueFilter, setMatchesQueueFilter] = useState<"all" | "live" | "today" | "upcoming">("all");
 
-  const isSuperAdmin = user?.role === "superadmin" || user?.role === "Administrator" || user?.username === "admin123";
+  const isSuperAdmin = Boolean(
+    user?.role === "superadmin" ||
+    user?.username?.toLowerCase() === "admin123" ||
+    user?.email?.toLowerCase() === "sivasakthi12000@gmail.com"
+  );
+
+  // Preserve active admin page on reload
+  useEffect(() => {
+    try {
+      localStorage.setItem("sportsnest_active_admin_session", "true");
+      sessionStorage.removeItem("sportsnest_deliberate_home");
+    } catch {}
+  }, []);
+
+  // Update timer tick every second for live kickoff and registration countdowns
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowTick(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Protect Dashboard: only accessible when authenticated
   useEffect(() => {
@@ -152,10 +175,47 @@ const Dashboard: React.FC = () => {
     fetchSupabaseData();
   }, []);
 
-  // Today's matches generated from tournament schedules
+  // Role-restricted tournaments: Super Admin sees all; Tournament Organizer sees their own tournaments only
+  const visibleTournaments = useMemo(() => {
+    if (isSuperAdmin) return tournaments;
+    const username = (user?.username || "").toLowerCase().trim();
+    const email = (user?.email || "").toLowerCase().trim();
+    return tournaments.filter((t) => {
+      const creator = (t.createdBy || "").toLowerCase().trim();
+      return (
+        creator === username ||
+        creator === email ||
+        (username && creator.includes(username)) ||
+        (email && creator.includes(email))
+      );
+    });
+  }, [isSuperAdmin, tournaments, user]);
+
+  const relevantSportIds = useMemo(() => {
+    return new Set(visibleTournaments.map((t) => t.sportId).filter(Boolean));
+  }, [visibleTournaments]);
+
+  // Today's matches generated from scoped tournament schedules
   const todayMatches: LiveMatch[] = useMemo(() => {
-    return generateTodayMatches(tournaments);
-  }, [tournaments]);
+    return generateTodayMatches(visibleTournaments);
+  }, [visibleTournaments]);
+
+  // Realtime countdown helper for deadlines and tournament kickoffs
+  const getRemainingCountdown = (dateStr?: string) => {
+    if (!dateStr) return { text: "Not Scheduled", urgent: false, expired: true, days: 0 };
+    const target = new Date(dateStr).getTime();
+    const diff = target - nowTick;
+    if (diff <= 0) return { text: "Closed / Started", urgent: false, expired: true, days: 0 };
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    const urgent = days < 3;
+    if (days > 0) {
+      return { text: `${days}d ${hours}h ${minutes}m`, urgent, expired: false, days, hours, minutes, seconds };
+    }
+    return { text: `${hours}h ${minutes}m ${seconds}s`, urgent: true, expired: false, days, hours, minutes, seconds };
+  };
 
   // Format money based on selected currency using real Supabase figures
   const formatMoney = (amount: number) => {
@@ -174,22 +234,28 @@ const Dashboard: React.FC = () => {
     );
   };
 
-  // Aggregated live calculations from Supabase
+  // Organizer specific team sum across their hosted tournaments
+  const organizerTeamsCount = useMemo(() => {
+    return visibleTournaments.reduce((acc, t) => acc + (Number(t.registeredTeams) || 0), 0);
+  }, [visibleTournaments]);
+
+  // Aggregated live calculations scoped to user role (all tournaments for Super Admin, hosted tournaments for Organizer)
   const stats = useMemo(() => {
-    const totalTourneys = tournaments.length;
-    const totalPrizeRaw = tournaments.reduce((acc, t) => acc + (Number(t.prizeAmount) || 0), 0);
-    // Exact same calculation as "Total Entry Fees" card: entryFee * registeredTeams
-    const totalFeesRaw = tournaments.reduce(
+    const list = isSuperAdmin ? tournaments : visibleTournaments;
+    const totalTourneys = list.length;
+    const totalPrizeRaw = list.reduce((acc, t) => acc + (Number(t.prizeAmount) || 0), 0);
+    const totalFeesRaw = list.reduce(
       (acc, t) => acc + (Number(t.entryFee) || 0) * (Number(t.registeredTeams) || 0),
       0
     );
-    const registeredTeamsSum = tournaments.reduce((acc, t) => acc + (Number(t.registeredTeams) || 0), 0);
-    const maxTeamsSum = tournaments.reduce((acc, t) => acc + (Number(t.maxTeams) || 0), 0) || 1;
+    const registeredTeamsSum = isSuperAdmin
+      ? list.reduce((acc, t) => acc + (Number(t.registeredTeams) || 0), 0)
+      : organizerTeamsCount;
+    const maxTeamsSum = list.reduce((acc, t) => acc + (Number(t.maxTeams) || 0), 0) || 1;
 
-    // Unique venues
-    const uniqueVenues = new Set(tournaments.map((t) => t.groundName).filter(Boolean));
+    // Unique venues in visible tournaments
+    const uniqueVenues = new Set(list.map((t) => t.groundName).filter(Boolean));
 
-    // Prize pool allocation: (Total Entry Fees Collected / Total Prize Pool) * 100
     const prizePoolAllocationPercent =
       totalPrizeRaw > 0 && !isNaN(totalFeesRaw) && !isNaN(totalPrizeRaw)
         ? Math.min(100, Math.max(0, Math.round((totalFeesRaw / totalPrizeRaw) * 100)))
@@ -205,20 +271,22 @@ const Dashboard: React.FC = () => {
       prizePoolAllocationPercent: isNaN(prizePoolAllocationPercent) ? 0 : prizePoolAllocationPercent,
       uniqueVenuesCount: uniqueVenues.size,
     };
-  }, [tournaments]);
+  }, [isSuperAdmin, tournaments, visibleTournaments, organizerTeamsCount]);
 
-  // Calculate 12-month data from Supabase tournament dates
+  // Calculate 12-month data scoped to visibleTournaments
   const monthlyChartData = useMemo(() => {
     const monthlySums = Array(12).fill(0);
     const monthlyCounts = Array(12).fill(0);
+    const monthlyFees = Array(12).fill(0);
 
-    tournaments.forEach((t) => {
+    visibleTournaments.forEach((t) => {
       if (t.date) {
         const d = new Date(t.date);
         if (!isNaN(d.getTime())) {
           const m = d.getMonth();
           monthlySums[m] += t.prizeAmount || 0;
           monthlyCounts[m] += 1;
+          monthlyFees[m] += (Number(t.entryFee) || 0) * (Number(t.registeredTeams) || 0);
         }
       }
     });
@@ -228,19 +296,20 @@ const Dashboard: React.FC = () => {
     return MONTH_NAMES.map((name, idx) => {
       const val = monthlySums[idx];
       const count = monthlyCounts[idx];
-      // Normalize height to percentage between 15% and 95%
-      const heightPercent = val > 0 ? Math.max(18, Math.round((val / maxVal) * 95)) : 20;
+      const fees = monthlyFees[idx];
+      const heightPercent = val > 0 ? Math.max(18, Math.round((val / maxVal) * 95)) : 15;
       return {
         month: name,
         index: idx,
         val,
         count,
+        fees,
         heightPercent,
       };
     });
-  }, [tournaments]);
+  }, [visibleTournaments]);
 
-  // Top 4 sports cards with real counts from Supabase
+  // Top sports cards scoped to visibleTournaments
   const topSportsCards = useMemo(() => {
     const sportIconMap: Record<string, string> = {
       Soccer: "⚽",
@@ -254,40 +323,29 @@ const Dashboard: React.FC = () => {
       Kabaddi: "🤼",
     };
 
-    return sports.slice(0, 4).map((s) => {
-      const sportTourneys = tournaments.filter((t) => t.sportId === s.id);
-      const totalPrize = sportTourneys.reduce((sum, t) => sum + (t.prizeAmount || 0), 0);
+    const countsMap: Record<number, { count: number; prize: number }> = {};
+    visibleTournaments.forEach((t) => {
+      const sId = t.sportId || 1;
+      if (!countsMap[sId]) countsMap[sId] = { count: 0, prize: 0 };
+      countsMap[sId].count += 1;
+      countsMap[sId].prize += Number(t.prizeAmount) || 0;
+    });
+
+    // If organizer has tournaments, show their sports; otherwise show available sports catalog
+    const sportsWithTourneys = sports.filter((s) => (countsMap[s.id]?.count || 0) > 0);
+    const sportsList = sportsWithTourneys.length > 0 ? sportsWithTourneys : sports.slice(0, 4);
+
+    return sportsList.slice(0, 4).map((s) => {
       return {
         id: s.id,
         name: s.name,
-        icon: sportIconMap[s.name] || "🏆",
-        tournamentsCount: sportTourneys.length,
-        totalPrize,
+        icon: s.icon || sportIconMap[s.name] || "🏆",
+        tournamentsCount: countsMap[s.id]?.count || 0,
+        totalPrize: countsMap[s.id]?.prize || 0,
         status: "Active",
       };
     });
-  }, [sports, tournaments]);
-
-  // Role-restricted tournaments: Super Admin sees all; Admin sees assigned tournaments only
-  const visibleTournaments = useMemo(() => {
-    if (isSuperAdmin) return tournaments;
-    const username = (user?.username || "").toLowerCase();
-    const email = (user?.email || "").toLowerCase();
-    const assigned = tournaments.filter((t) => {
-      const creator = (t.createdBy || "").toLowerCase();
-      return (
-        creator === username ||
-        creator === email ||
-        (username && creator.includes(username)) ||
-        (email && creator.includes(email))
-      );
-    });
-    return assigned.length > 0 ? assigned : tournaments.slice(0, 4);
-  }, [isSuperAdmin, tournaments, user]);
-
-  const relevantSportIds = useMemo(() => {
-    return new Set(visibleTournaments.map((t) => t.sportId).filter(Boolean));
-  }, [visibleTournaments]);
+  }, [sports, visibleTournaments]);
 
   // Filtered recent tournaments supporting all statuses: upcoming, live, pending_approval, disputed, completed
   const filteredTournaments = useMemo(() => {
@@ -454,7 +512,9 @@ const Dashboard: React.FC = () => {
                   </div>
                   {!sidebarCollapsed && (
                     <span className="dash-nav-badge">
-                      {totalTeamsExact ? totalTeamsExact.toLocaleString() : stats.registeredTeamsSum}
+                      {isSuperAdmin
+                        ? (totalTeamsExact || stats.registeredTeamsSum).toLocaleString()
+                        : organizerTeamsCount.toLocaleString()}
                     </span>
                   )}
                 </button>
@@ -1015,7 +1075,8 @@ const Dashboard: React.FC = () => {
 
           {selectedMenu === "teams" && (
             <AdminTeamsView
-              tournaments={tournaments}
+              tournaments={isSuperAdmin ? tournaments : visibleTournaments}
+              isSuperAdmin={isSuperAdmin}
               initialTournamentFilter={teamTournamentFilter}
               onRefreshParentCounts={fetchSupabaseData}
             />
@@ -1181,7 +1242,7 @@ const Dashboard: React.FC = () => {
                     <div>
                       <label style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>Current Records</label>
                       <div style={{ fontWeight: 600, color: "#0f172a" }}>
-                        {tournaments.length} Tournaments | {sports.length} Sports | {totalTeamsExact || stats.registeredTeamsSum} Teams
+                        {visibleTournaments.length} Tournaments | {isSuperAdmin ? sports.length : relevantSportIds.size} Sports | {isSuperAdmin ? (totalTeamsExact || stats.registeredTeamsSum) : organizerTeamsCount} Teams
                       </div>
                     </div>
                     <button
@@ -1271,15 +1332,55 @@ const Dashboard: React.FC = () => {
               TOP 3 METRIC CARDS
               ========================================================= */}
           <div className="dash-top-metrics-grid">
-            {/* CARD 1: Account Balance / Total Prize Pool */}
-            <div className="dash-metric-card" style={{ background: "#ffffff" }}>
+            {/* CARD 1: Total Prize Pool */}
+            <div
+              className="dash-metric-card"
+              style={{
+                background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+                border: "1px solid #e2e8f0",
+                boxShadow: "0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.03)",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: "4px",
+                  background: "linear-gradient(90deg, #10b981, #059669)",
+                }}
+              />
               <div>
                 <div className="dash-metric-card-header">
                   <div className="dash-metric-title-group">
-                    <div className="dash-metric-icon-box">
-                      <DollarSign size={18} />
+                    <div
+                      className="dash-metric-icon-box"
+                      style={{
+                        background: "rgba(16, 185, 129, 0.12)",
+                        color: "#059669",
+                        borderRadius: "10px",
+                      }}
+                    >
+                      <DollarSign size={20} />
                     </div>
-                    <span className="dash-metric-label">Total Prize Pool</span>
+                    <div>
+                      <span className="dash-metric-label" style={{ fontWeight: 800, color: "#1e293b", fontSize: "0.95rem" }}>
+                        Total Prize Pool
+                      </span>
+                      <span
+                        style={{
+                          display: "block",
+                          fontSize: "0.72rem",
+                          color: isSuperAdmin ? "#b45309" : "#047857",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {isSuperAdmin ? "👑 All Database Tournaments" : "🛡️ Your Hosted Tournaments"}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Currency selector with INR as primary */}
@@ -1288,6 +1389,13 @@ const Dashboard: React.FC = () => {
                     value={selectedCurrency}
                     onChange={(e) => setSelectedCurrency(e.target.value as CurrencyKey)}
                     title="Change Currency"
+                    style={{
+                      fontWeight: 700,
+                      borderRadius: "8px",
+                      border: "1px solid #cbd5e1",
+                      padding: "4px 8px",
+                      background: "#ffffff",
+                    }}
                   >
                     <option value="INR">🇮🇳 INR (₹)</option>
                     <option value="USD">🇺🇸 USD ($)</option>
@@ -1296,7 +1404,16 @@ const Dashboard: React.FC = () => {
                   </select>
                 </div>
 
-                <div className="dash-metric-big-number">
+                <div
+                  className="dash-metric-big-number"
+                  style={{
+                    fontSize: "2rem",
+                    fontWeight: 800,
+                    color: "#0f172a",
+                    letterSpacing: "-0.5px",
+                    margin: "0.6rem 0 0.35rem 0",
+                  }}
+                >
                   {loading ? (
                     <div className="dash-skeleton-pulse" style={{ height: "40px", width: "200px" }} />
                   ) : (
@@ -1304,17 +1421,26 @@ const Dashboard: React.FC = () => {
                   )}
                 </div>
 
-                <div className="dash-trend-pill positive">
-                  <span>● Live Supabase synced database</span>
+                <div className="dash-trend-pill positive" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10b981", display: "inline-block" }}></span>
+                  <span style={{ fontWeight: 600 }}>
+                    {isSuperAdmin ? "Live Supabase Database Sync" : `${visibleTournaments.length} Active Events Hosted`}
+                  </span>
                 </div>
               </div>
 
-              {/* Two Action buttons */}
-              <div className="dash-card-actions-row">
+              {/* Action buttons */}
+              <div className="dash-card-actions-row" style={{ marginTop: "1rem" }}>
                 <button
                   onClick={() => setShowCreateModal(true)}
                   className="dash-btn-primary-pill"
-                  style={{ border: "none", cursor: "pointer" }}
+                  style={{
+                    border: "none",
+                    cursor: "pointer",
+                    background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                    color: "#ffffff",
+                    fontWeight: 700,
+                  }}
                 >
                   <ArrowUpRight size={16} />
                   <span>Create Tournament</span>
@@ -1326,7 +1452,13 @@ const Dashboard: React.FC = () => {
                     setTeamTournamentFilter(null);
                   }}
                   className="dash-btn-secondary-pill"
-                  style={{ border: "none", cursor: "pointer" }}
+                  style={{
+                    border: "1px solid #cbd5e1",
+                    cursor: "pointer",
+                    background: "#ffffff",
+                    color: "#334155",
+                    fontWeight: 700,
+                  }}
                 >
                   <ArrowDownLeft size={16} />
                   <span>Register Team</span>
@@ -1334,22 +1466,73 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* CARD 2: Total Expenses / Entry Fees Collected */}
-            <div className="dash-metric-card">
+            {/* CARD 2: Total Entry Fees Collected */}
+            <div
+              className="dash-metric-card"
+              style={{
+                background: "linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%)",
+                border: "1px solid #bbf7d0",
+                boxShadow: "0 4px 20px -2px rgba(16, 185, 129, 0.08)",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: "4px",
+                  background: "linear-gradient(90deg, #059669, #34d399)",
+                }}
+              />
               <div>
                 <div className="dash-metric-card-header">
                   <div className="dash-metric-title-group">
-                    <div className="dash-metric-icon-box">
-                      <TrendingUp size={18} />
+                    <div
+                      className="dash-metric-icon-box"
+                      style={{
+                        background: "#dcfce7",
+                        color: "#16a34a",
+                        borderRadius: "10px",
+                      }}
+                    >
+                      <TrendingUp size={20} />
                     </div>
-                    <span className="dash-metric-label">Total Entry Fees</span>
+                    <div>
+                      <span className="dash-metric-label" style={{ fontWeight: 800, color: "#1e293b", fontSize: "0.95rem" }}>
+                        Total Entry Fees
+                      </span>
+                      <span style={{ display: "block", fontSize: "0.72rem", color: "#15803d", fontWeight: 700 }}>
+                        {isSuperAdmin ? "Gross Database Inflow" : "Your Event Collections"}
+                      </span>
+                    </div>
                   </div>
-                  <button className="dash-three-dots" title="Options">
-                    <MoreVertical size={16} />
-                  </button>
+                  <span
+                    style={{
+                      background: "#dcfce7",
+                      color: "#15803d",
+                      padding: "2px 8px",
+                      borderRadius: "6px",
+                      fontSize: "0.74rem",
+                      fontWeight: 700,
+                    }}
+                  >
+                    100% Verified
+                  </span>
                 </div>
 
-                <div className="dash-metric-big-number">
+                <div
+                  className="dash-metric-big-number"
+                  style={{
+                    fontSize: "2rem",
+                    fontWeight: 800,
+                    color: "#0f172a",
+                    letterSpacing: "-0.5px",
+                    margin: "0.6rem 0 0.35rem 0",
+                  }}
+                >
                   {loading ? (
                     <div className="dash-skeleton-pulse" style={{ height: "40px", width: "160px" }} />
                   ) : (
@@ -1357,28 +1540,101 @@ const Dashboard: React.FC = () => {
                   )}
                 </div>
 
-                <div className="dash-trend-pill positive">
-                  <span>● Collected from {stats.registeredTeamsSum} teams</span>
+                <div className="dash-trend-pill positive" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#16a34a", display: "inline-block" }}></span>
+                  <span style={{ fontWeight: 600 }}>
+                    Collected from {stats.registeredTeamsSum} squads
+                  </span>
+                </div>
+              </div>
+
+              {/* Progress bar showing fee collection against prize commitment */}
+              <div style={{ marginTop: "1rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "#64748b", marginBottom: "4px" }}>
+                  <span>Fee to Prize Ratio</span>
+                  <span style={{ fontWeight: 700, color: "#16a34a" }}>{stats.prizePoolAllocationPercent}% Funded</span>
+                </div>
+                <div style={{ width: "100%", height: "6px", background: "#e2e8f0", borderRadius: "999px", overflow: "hidden" }}>
+                  <div
+                    style={{
+                      width: `${Math.min(100, stats.prizePoolAllocationPercent)}%`,
+                      height: "100%",
+                      background: "linear-gradient(90deg, #10b981, #059669)",
+                      borderRadius: "999px",
+                      transition: "width 0.4s ease",
+                    }}
+                  />
                 </div>
               </div>
             </div>
 
-            {/* CARD 3: Total Savings / Registered Teams */}
-            <div className="dash-metric-card">
+            {/* CARD 3: Registered Teams */}
+            <div
+              className="dash-metric-card"
+              style={{
+                background: "linear-gradient(180deg, #ffffff 0%, #f0f9ff 100%)",
+                border: "1px solid #bae6fd",
+                boxShadow: "0 4px 20px -2px rgba(2, 132, 199, 0.08)",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: "4px",
+                  background: "linear-gradient(90deg, #0284c7, #38bdf8)",
+                }}
+              />
               <div>
                 <div className="dash-metric-card-header">
                   <div className="dash-metric-title-group">
-                    <div className="dash-metric-icon-box">
-                      <Users size={18} />
+                    <div
+                      className="dash-metric-icon-box"
+                      style={{
+                        background: "#e0f2fe",
+                        color: "#0284c7",
+                        borderRadius: "10px",
+                      }}
+                    >
+                      <Users size={20} />
                     </div>
-                    <span className="dash-metric-label">Registered Teams</span>
+                    <div>
+                      <span className="dash-metric-label" style={{ fontWeight: 800, color: "#1e293b", fontSize: "0.95rem" }}>
+                        Registered Teams
+                      </span>
+                      <span style={{ display: "block", fontSize: "0.72rem", color: "#0369a1", fontWeight: 700 }}>
+                        {isSuperAdmin ? "Live Database Squads" : "Your Tournament Squads"}
+                      </span>
+                    </div>
                   </div>
-                  <button className="dash-three-dots" title="Options">
-                    <MoreVertical size={16} />
-                  </button>
+                  <span
+                    style={{
+                      background: "#e0f2fe",
+                      color: "#0369a1",
+                      padding: "2px 8px",
+                      borderRadius: "6px",
+                      fontSize: "0.74rem",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Active Rosters
+                  </span>
                 </div>
 
-                <div className="dash-metric-big-number">
+                <div
+                  className="dash-metric-big-number"
+                  style={{
+                    fontSize: "2rem",
+                    fontWeight: 800,
+                    color: "#0f172a",
+                    letterSpacing: "-0.5px",
+                    margin: "0.6rem 0 0.35rem 0",
+                  }}
+                >
                   {loading ? (
                     <div className="dash-skeleton-pulse" style={{ height: "40px", width: "140px" }} />
                   ) : (
@@ -1386,43 +1642,110 @@ const Dashboard: React.FC = () => {
                   )}
                 </div>
 
-                <div className="dash-trend-pill positive">
-                  <span>● Across {stats.totalTourneys} tournaments</span>
+                <div className="dash-trend-pill positive" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#0284c7", display: "inline-block" }}></span>
+                  <span style={{ fontWeight: 600 }}>
+                    Across {stats.totalTourneys} sanctioned tournaments
+                  </span>
+                </div>
+              </div>
+
+              {/* Slot capacity fill */}
+              <div style={{ marginTop: "1rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "#64748b", marginBottom: "4px" }}>
+                  <span>Tournament Quota Fill</span>
+                  <span style={{ fontWeight: 700, color: "#0284c7" }}>
+                    {stats.registeredTeamsSum} / {stats.maxTeamsSum} Slots ({stats.capacityPercent}%)
+                  </span>
+                </div>
+                <div style={{ width: "100%", height: "6px", background: "#e2e8f0", borderRadius: "999px", overflow: "hidden" }}>
+                  <div
+                    style={{
+                      width: `${Math.min(100, stats.capacityPercent)}%`,
+                      height: "100%",
+                      background: "linear-gradient(90deg, #0284c7, #38bdf8)",
+                      borderRadius: "999px",
+                      transition: "width 0.4s ease",
+                    }}
+                  />
                 </div>
               </div>
             </div>
 
-            {/* CARD 4: Live / Today's Matches Stat Card */}
+            {/* CARD 4: Live / Today's Matches */}
             <div
               className="dash-metric-card"
-              style={{ cursor: "pointer", position: "relative" }}
+              style={{
+                cursor: "pointer",
+                background: "linear-gradient(180deg, #ffffff 0%, #fff1f2 100%)",
+                border: "1px solid #fecdd3",
+                boxShadow: "0 4px 20px -2px rgba(225, 29, 72, 0.08)",
+                position: "relative",
+                overflow: "hidden",
+              }}
               onClick={() => setSelectedMenu("matches")}
               title="Click to view live and today's schedule"
               id="dash-card-live-matches"
             >
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: "4px",
+                  background: "linear-gradient(90deg, #e11d48, #f43f5e)",
+                }}
+              />
               <div>
                 <div className="dash-metric-card-header">
                   <div className="dash-metric-title-group">
-                    <div className="dash-metric-icon-box" style={{ background: "#fee2e2", color: "#dc2626" }}>
-                      <Radio size={18} />
+                    <div
+                      className="dash-metric-icon-box"
+                      style={{
+                        background: "#ffe4e6",
+                        color: "#e11d48",
+                        borderRadius: "10px",
+                      }}
+                    >
+                      <Radio size={20} />
                     </div>
-                    <span className="dash-metric-label">Today's Matches</span>
+                    <div>
+                      <span className="dash-metric-label" style={{ fontWeight: 800, color: "#1e293b", fontSize: "0.95rem" }}>
+                        Today's Matches
+                      </span>
+                      <span style={{ display: "block", fontSize: "0.72rem", color: "#be123c", fontWeight: 700 }}>
+                        Real-Time Match Queue
+                      </span>
+                    </div>
                   </div>
-                  <button className="dash-three-dots" title="View all matches">
-                    <ChevronRight size={16} />
-                  </button>
+                  <ChevronRight size={18} color="#e11d48" />
                 </div>
 
-                <div className="dash-metric-big-number" style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
+                <div
+                  className="dash-metric-big-number"
+                  style={{
+                    display: "flex",
+                    alignItems: "baseline",
+                    gap: "0.5rem",
+                    margin: "0.6rem 0 0.35rem 0",
+                  }}
+                >
                   {loading ? (
                     <div className="dash-skeleton-pulse" style={{ height: "40px", width: "120px" }} />
                   ) : (
                     <>
-                      <span style={{ color: todayMatches.filter((m) => m.status === "live").length > 0 ? "#dc2626" : "#0f172a" }}>
+                      <span
+                        style={{
+                          fontSize: "2rem",
+                          fontWeight: 800,
+                          color: todayMatches.filter((m) => m.status === "live").length > 0 ? "#e11d48" : "#0f172a",
+                        }}
+                      >
                         {todayMatches.filter((m) => m.status === "live").length}
                       </span>
-                      <span style={{ fontSize: "1rem", color: "#64748b", fontWeight: 600 }}>
-                        Live / {todayMatches.length} Today
+                      <span style={{ fontSize: "1rem", color: "#64748b", fontWeight: 700 }}>
+                        Live / {todayMatches.length} Scheduled Today
                       </span>
                     </>
                   )}
@@ -1431,14 +1754,27 @@ const Dashboard: React.FC = () => {
                 <div
                   className="dash-trend-pill"
                   style={{
-                    background: todayMatches.filter((m) => m.status === "live").length > 0 ? "#fee2e2" : "#f1f5f9",
-                    color: todayMatches.filter((m) => m.status === "live").length > 0 ? "#b91c1c" : "#475569",
+                    background: todayMatches.filter((m) => m.status === "live").length > 0 ? "#ffe4e6" : "#f1f5f9",
+                    color: todayMatches.filter((m) => m.status === "live").length > 0 ? "#be123c" : "#475569",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
                   }}
                 >
-                  <span>
-                    ● {todayMatches.filter((m) => m.status === "live").length > 0
+                  <span
+                    style={{
+                      width: "6px",
+                      height: "6px",
+                      borderRadius: "50%",
+                      background: todayMatches.filter((m) => m.status === "live").length > 0 ? "#e11d48" : "#64748b",
+                      display: "inline-block",
+                      boxShadow: todayMatches.filter((m) => m.status === "live").length > 0 ? "0 0 6px #e11d48" : "none",
+                    }}
+                  />
+                  <span style={{ fontWeight: 700 }}>
+                    {todayMatches.filter((m) => m.status === "live").length > 0
                       ? `${todayMatches.filter((m) => m.status === "live").length} currently in action`
-                      : "Matches scheduled for today"}
+                      : "Open Match Center →"}
                   </span>
                 </div>
               </div>
@@ -1503,7 +1839,64 @@ const Dashboard: React.FC = () => {
             {/* RIGHT: Overview Bar Chart */}
             <div className="dash-panel-card">
               <div className="dash-panel-header">
-                <h2 className="dash-panel-title">Overview</h2>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                  <h2 className="dash-panel-title" style={{ margin: 0 }}>Overview</h2>
+
+                  {/* 2-Type Chart Toggle Button */}
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      background: "#f1f5f9",
+                      padding: "2px",
+                      borderRadius: "8px",
+                      gap: "2px",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setChartType("bar")}
+                      style={{
+                        padding: "3px 9px",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        border: "none",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        background: chartType === "bar" ? "#ffffff" : "transparent",
+                        color: chartType === "bar" ? "#0f172a" : "#64748b",
+                        boxShadow: chartType === "bar" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                    >
+                      <span>📊</span>
+                      <span>Bar Chart</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setChartType("area")}
+                      style={{
+                        padding: "3px 9px",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        border: "none",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        background: chartType === "area" ? "#ffffff" : "transparent",
+                        color: chartType === "area" ? "#0f172a" : "#64748b",
+                        boxShadow: chartType === "area" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                    >
+                      <span>📈</span>
+                      <span>Area Trend</span>
+                    </button>
+                  </div>
+                </div>
 
                 <div className="dash-chart-legend-group">
                   <div className="dash-legend-item">
@@ -1526,41 +1919,147 @@ const Dashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* 12-Month Bar Chart with Highlight and Tooltip */}
-              <div className="dash-bars-canvas">
-                {monthlyChartData.map((item, idx) => {
-                  const isHighlighted = activeBarIndex === idx;
-                  return (
-                    <div
-                      key={item.month}
-                      className={`dash-bar-col ${isHighlighted ? "highlight" : ""}`}
-                      onClick={() => setActiveBarIndex(idx)}
-                    >
-                      {/* Floating tooltip badge matching image on highlight */}
-                      {isHighlighted && (
-                        <div className="dash-bar-tooltip">
-                          <span style={{ color: "#059669", marginRight: "4px" }}>●</span>
-                          <span>
-                            {item.month}: {formatMoney(item.val)}
-                          </span>
-                        </div>
-                      )}
-
+              {/* Chart Views */}
+              {chartType === "bar" ? (
+                /* TYPE 1: 12-Month Bar Chart with Highlight and Tooltip */
+                <div className="dash-bars-canvas">
+                  {monthlyChartData.map((item, idx) => {
+                    const isHighlighted = activeBarIndex === idx;
+                    return (
                       <div
-                        className="dash-bar-tube"
-                        style={{ height: `${item.heightPercent}%` }}
-                        title={`${item.month}: ${item.count} tournaments, ${formatMoney(item.val)}`}
-                      />
-                      <span className="dash-bar-month">{item.month}</span>
-                    </div>
-                  );
-                })}
-              </div>
+                        key={item.month}
+                        className={`dash-bar-col ${isHighlighted ? "highlight" : ""}`}
+                        onClick={() => setActiveBarIndex(idx)}
+                      >
+                        {/* Floating tooltip badge matching image on highlight */}
+                        {isHighlighted && (
+                          <div className="dash-bar-tooltip">
+                            <span style={{ color: "#059669", marginRight: "4px" }}>●</span>
+                            <span>
+                              {item.month}: {formatMoney(item.val)}
+                            </span>
+                          </div>
+                        )}
+
+                        <div
+                          className="dash-bar-tube"
+                          style={{ height: `${item.heightPercent}%` }}
+                          title={`${item.month}: ${item.count} tournaments, ${formatMoney(item.val)}`}
+                        />
+                        <span className="dash-bar-month">{item.month}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* TYPE 2: SVG Area / Spline Trend Curve */
+                <div style={{ padding: "0.5rem 0", position: "relative" }}>
+                  <svg
+                    viewBox="0 0 520 180"
+                    style={{ width: "100%", height: "180px", overflow: "visible" }}
+                  >
+                    <defs>
+                      <linearGradient id="areaTrendGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity="0.45" />
+                        <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
+
+                    {/* Background grid lines */}
+                    <line x1="20" y1="30" x2="500" y2="30" stroke="#f1f5f9" strokeDasharray="3 3" />
+                    <line x1="20" y1="80" x2="500" y2="80" stroke="#f1f5f9" strokeDasharray="3 3" />
+                    <line x1="20" y1="130" x2="500" y2="130" stroke="#e2e8f0" strokeWidth="1.5" />
+
+                    {(() => {
+                      const maxVal = Math.max(...monthlyChartData.map((d) => d.val), 1);
+                      const pts = monthlyChartData.map((d, i) => ({
+                        x: 25 + (i * 470) / 11,
+                        y: 130 - (d.val / maxVal) * 105,
+                        ...d,
+                      }));
+
+                      const areaPath =
+                        `M ${pts[0].x} 130 ` +
+                        pts.map((p) => `L ${p.x} ${p.y}`).join(" ") +
+                        ` L ${pts[pts.length - 1].x} 130 Z`;
+                      const linePath =
+                        `M ${pts[0].x} ${pts[0].y} ` +
+                        pts.slice(1).map((p) => `L ${p.x} ${p.y}`).join(" ");
+
+                      return (
+                        <>
+                          <path d={areaPath} fill="url(#areaTrendGrad)" />
+                          <path
+                            d={linePath}
+                            fill="none"
+                            stroke="#059669"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          {pts.map((p, idx) => {
+                            const isSelected = activeBarIndex === idx;
+                            return (
+                              <g
+                                key={p.month}
+                                onClick={() => setActiveBarIndex(idx)}
+                                style={{ cursor: "pointer" }}
+                              >
+                                <circle
+                                  cx={p.x}
+                                  cy={p.y}
+                                  r={isSelected ? 6 : 4}
+                                  fill={isSelected ? "#059669" : "#ffffff"}
+                                  stroke="#059669"
+                                  strokeWidth="2.5"
+                                />
+                                <text
+                                  x={p.x}
+                                  y={150}
+                                  textAnchor="middle"
+                                  fontSize="11"
+                                  fontWeight={isSelected ? "800" : "500"}
+                                  fill={isSelected ? "#0f172a" : "#64748b"}
+                                >
+                                  {p.month}
+                                </text>
+                              </g>
+                            );
+                          })}
+                        </>
+                      );
+                    })()}
+                  </svg>
+
+                  {/* Active Month Detail Strip */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      background: "#f0fdf4",
+                      border: "1px solid #bbf7d0",
+                      borderRadius: "8px",
+                      padding: "0.4rem 0.85rem",
+                      marginTop: "0.35rem",
+                      fontSize: "0.82rem",
+                    }}
+                  >
+                    <span style={{ fontWeight: 700, color: "#166534" }}>
+                      ● {monthlyChartData[activeBarIndex]?.month || "Month"} Trend Metric:
+                    </span>
+                    <span style={{ color: "#334155" }}>
+                      <strong>{formatMoney(monthlyChartData[activeBarIndex]?.val || 0)}</strong> Prize Pool &bull;{" "}
+                      <strong>{monthlyChartData[activeBarIndex]?.count || 0}</strong> Events Scheduled
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
           {/* =========================================================
-              LIVE & TODAY'S MATCHES SECTION
+              LIVE & TODAY'S MATCHES SECTION WITH DATE-BASED QUEUE
               ========================================================= */}
           <div className="dash-panel-card" style={{ marginBottom: "1.5rem" }} id="dash-section-live-matches">
             <div className="dash-panel-header">
@@ -1569,7 +2068,7 @@ const Dashboard: React.FC = () => {
                 <div>
                   <h2 className="dash-panel-title" style={{ margin: 0 }}>Live & Today's Matches</h2>
                   <span style={{ fontSize: "0.78rem", color: "#64748b" }}>
-                    Matches currently in progress and scheduled for today
+                    Real-time match queue and schedule for live tournament grounds
                   </span>
                 </div>
               </div>
@@ -1597,159 +2096,364 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* List of matches in progress and scheduled today */}
+            {/* Date-Based Queue Filter Buttons */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                flexWrap: "wrap",
+                marginTop: "0.75rem",
+                paddingBottom: "0.5rem",
+                borderBottom: "1px solid #f1f5f9",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setMatchesQueueFilter("all")}
+                style={{
+                  padding: "0.35rem 0.8rem",
+                  borderRadius: "999px",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  border: matchesQueueFilter === "all" ? "1px solid #059669" : "1px solid #e2e8f0",
+                  background: matchesQueueFilter === "all" ? "#ecfdf5" : "#ffffff",
+                  color: matchesQueueFilter === "all" ? "#065f46" : "#475569",
+                  transition: "all 0.2s",
+                }}
+              >
+                All Matches ({todayMatches.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMatchesQueueFilter("live")}
+                style={{
+                  padding: "0.35rem 0.8rem",
+                  borderRadius: "999px",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  border: matchesQueueFilter === "live" ? "1px solid #ef4444" : "1px solid #e2e8f0",
+                  background: matchesQueueFilter === "live" ? "#fef2f2" : "#ffffff",
+                  color: matchesQueueFilter === "live" ? "#dc2626" : "#475569",
+                  transition: "all 0.2s",
+                }}
+              >
+                🔴 Live Now ({todayMatches.filter((m) => m.status === "live").length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMatchesQueueFilter("today")}
+                style={{
+                  padding: "0.35rem 0.8rem",
+                  borderRadius: "999px",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  border: matchesQueueFilter === "today" ? "1px solid #0284c7" : "1px solid #e2e8f0",
+                  background: matchesQueueFilter === "today" ? "#eff6ff" : "#ffffff",
+                  color: matchesQueueFilter === "today" ? "#1e40af" : "#475569",
+                  transition: "all 0.2s",
+                }}
+              >
+                📅 Today's Queue ({todayMatches.filter((m) => m.status === "today").length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMatchesQueueFilter("upcoming")}
+                style={{
+                  padding: "0.35rem 0.8rem",
+                  borderRadius: "999px",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  border: matchesQueueFilter === "upcoming" ? "1px solid #d97706" : "1px solid #e2e8f0",
+                  background: matchesQueueFilter === "upcoming" ? "#fffbeb" : "#ffffff",
+                  color: matchesQueueFilter === "upcoming" ? "#b45309" : "#475569",
+                  transition: "all 0.2s",
+                }}
+              >
+                ⏳ Upcoming Queue ({todayMatches.filter((m) => m.status === "upcoming").length})
+              </button>
+            </div>
+
+            {/* List of matches in progress and scheduled */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "1rem", marginTop: "1rem" }}>
-              {todayMatches.slice(0, 3).map((match) => (
-                <div
-                  key={match.id}
-                  style={{
-                    background: match.status === "live" ? "#fff5f5" : "#f8fafc",
-                    border: `1px solid ${match.status === "live" ? "#fecaca" : "#e2e8f0"}`,
-                    borderRadius: "12px",
-                    padding: "1rem",
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                    <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#64748b" }}>
-                      {match.sportIcon} {match.tournamentName} &bull; {match.round}
-                    </span>
-                    <span
-                      className={`dash-status-pill ${
-                        match.status === "live"
-                          ? "live"
+              {(() => {
+                const filteredMatches = todayMatches.filter((m) => {
+                  if (matchesQueueFilter === "live") return m.status === "live";
+                  if (matchesQueueFilter === "today") return m.status === "today" || m.status === "live";
+                  if (matchesQueueFilter === "upcoming") return m.status === "upcoming";
+                  return true;
+                });
+
+                if (filteredMatches.length === 0) {
+                  return (
+                    <div style={{ padding: "2rem", textAlign: "center", color: "#64748b", gridColumn: "1 / -1" }}>
+                      No matches found in this queue category.
+                    </div>
+                  );
+                }
+
+                return filteredMatches.slice(0, 3).map((match) => (
+                  <div
+                    key={match.id}
+                    style={{
+                      background: match.status === "live" ? "#fff5f5" : "#f8fafc",
+                      border: `1px solid ${match.status === "live" ? "#fecaca" : "#e2e8f0"}`,
+                      borderRadius: "12px",
+                      padding: "1rem",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                      boxShadow: match.status === "live" ? "0 4px 12px rgba(239, 68, 68, 0.1)" : "none",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+                      <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#64748b" }}>
+                        {match.sportIcon} {match.tournamentName} &bull; {match.round}
+                      </span>
+                      <span
+                        className={`dash-status-pill ${
+                          match.status === "live"
+                            ? "live"
+                            : match.status === "completed"
+                            ? "success"
+                            : match.status === "disputed"
+                            ? "disputed"
+                            : "upcoming"
+                        }`}
+                      >
+                        {match.status === "live"
+                          ? `● ${match.statusLabel || "Live"}`
                           : match.status === "completed"
-                          ? "success"
+                          ? "✔ Completed"
                           : match.status === "disputed"
-                          ? "disputed"
-                          : "upcoming"
-                      }`}
-                    >
-                      {match.status === "live"
-                        ? `● ${match.statusLabel || "Live"}`
-                        : match.status === "completed"
-                        ? "✔ Completed"
-                        : match.status === "disputed"
-                        ? "⚠️ Disputed"
-                        : `⏰ ${match.timeDisplay || "Today"}`}
-                    </span>
-                  </div>
+                          ? "⚠️ Disputed"
+                          : `⏰ ${match.timeDisplay || "Today"}`}
+                      </span>
+                    </div>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "0.5rem 0" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <span style={{ fontWeight: 800, fontSize: "0.95rem", color: "#0f172a" }}>{match.teamA.name}</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "0.5rem 0" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <span style={{ fontWeight: 800, fontSize: "0.95rem", color: "#0f172a" }}>{match.teamA.name}</span>
+                      </div>
+                      <div style={{ fontWeight: 800, fontSize: "1.1rem", color: match.status === "live" ? "#dc2626" : "#475569" }}>
+                        {match.status === "today" ? "vs" : `${match.teamA.score} - ${match.teamB.score}`}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <span style={{ fontWeight: 800, fontSize: "0.95rem", color: "#0f172a" }}>{match.teamB.name}</span>
+                      </div>
                     </div>
-                    <div style={{ fontWeight: 800, fontSize: "1.1rem", color: match.status === "live" ? "#dc2626" : "#475569" }}>
-                      {match.status === "today" ? "vs" : `${match.teamA.score} - ${match.teamB.score}`}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <span style={{ fontWeight: 800, fontSize: "0.95rem", color: "#0f172a" }}>{match.teamB.name}</span>
-                    </div>
-                  </div>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", paddingTop: "0.5rem", borderTop: "1px dashed rgba(0,0,0,0.08)", fontSize: "0.75rem", color: "#64748b" }}>
-                    <span>📍 {match.groundName}, {match.location}</span>
-                    <button
-                      onClick={() => setSelectedMenu("matches")}
-                      style={{ background: "none", border: "none", color: "#059669", fontWeight: 700, cursor: "pointer", padding: 0 }}
-                    >
-                      Match Details &rarr;
-                    </button>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", paddingTop: "0.5rem", borderTop: "1px dashed rgba(0,0,0,0.08)", fontSize: "0.75rem", color: "#64748b" }}>
+                      <span>📍 {match.groundName}, {match.location}</span>
+                      <button
+                        onClick={() => setSelectedMenu("matches")}
+                        style={{ background: "none", border: "none", color: "#059669", fontWeight: 700, cursor: "pointer", padding: 0 }}
+                      >
+                        Match Details &rarr;
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ));
+              })()}
             </div>
           </div>
 
           {/* =========================================================
-              BOTTOM ROW: Capacity Goals (My Savings Plan) & Recent Tournaments
+              BOTTOM ROW: Upcoming Tournaments & Registration Deadlines
               ========================================================= */}
           <div className="dash-bottom-grid">
-            {/* LEFT: Capacity & Targets (My Savings Plan style) */}
+            {/* LEFT: UPCOMING TOURNAMENTS WITH TIMERS & DEADLINES */}
             <div className="dash-panel-card">
               <div className="dash-panel-header">
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <Sparkles size={18} color="#059669" />
-                  <h2 className="dash-panel-title">Capacity & Targets</h2>
+                  <Clock size={18} color="#059669" />
+                  <div>
+                    <h2 className="dash-panel-title" style={{ margin: 0 }}>Upcoming Tournaments & Deadlines</h2>
+                    <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                      Live countdown timers to last registration date & tournament kickoffs
+                    </span>
+                  </div>
                 </div>
-                <button className="dash-three-dots" title="More">
-                  <MoreVertical size={16} />
+                <button
+                  onClick={() => setSelectedMenu("tournaments")}
+                  className="dash-add-btn"
+                  style={{ border: "none", cursor: "pointer" }}
+                >
+                  <Plus size={14} />
+                  <span>View All</span>
                 </button>
               </div>
 
-              <div className="dash-goal-list">
-                {/* Goal 1: Team Registration Capacity */}
-                <div className="dash-goal-item">
-                  <div className="dash-goal-header">
-                    <div className="dash-goal-title-group">
-                      <div className="dash-goal-icon-circle">
-                        <Users size={16} />
-                      </div>
-                      <span className="dash-goal-name">Team Registration Goal</span>
-                    </div>
-                    <span className="dash-goal-percent">{stats.capacityPercent}%</span>
-                  </div>
-                  <div className="dash-goal-numbers">
-                    {stats.registeredTeamsSum.toLocaleString()} / {stats.maxTeamsSum.toLocaleString()} Teams
-                  </div>
-                  <div className="dash-progress-track">
-                    <div
-                      className="dash-progress-fill"
-                      style={{ width: `${stats.capacityPercent}%` }}
-                    />
-                  </div>
-                </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "0.75rem" }}>
+                {(() => {
+                  const upcomingList = (isSuperAdmin ? tournaments : visibleTournaments)
+                    .filter((t) => t.status === "upcoming" || !t.status || t.status === "active")
+                    .slice(0, 3);
 
-                {/* Goal 2: Prize Pool Allocation */}
-                <div className="dash-goal-item" id="dash-goal-prize-allocation">
-                  <div className="dash-goal-header">
-                    <div className="dash-goal-title-group">
-                      <div className="dash-goal-icon-circle" style={{ background: "#fef3c7", color: "#d97706" }}>
-                        <DollarSign size={16} />
+                  if (upcomingList.length === 0) {
+                    return (
+                      <div style={{ padding: "2rem", textAlign: "center", color: "#64748b" }}>
+                        <p style={{ margin: "0 0 0.5rem 0" }}>No upcoming tournaments scheduled yet.</p>
+                        <button
+                          onClick={() => setShowCreateModal(true)}
+                          className="admin-btn-primary"
+                          style={{ margin: "0 auto" }}
+                        >
+                          Create Tournament
+                        </button>
                       </div>
-                      <span className="dash-goal-name">Prize Pool Allocation</span>
-                    </div>
-                    <span className="dash-goal-percent" id="prize-pool-allocation-percent">
-                      {isNaN(stats.prizePoolAllocationPercent) ? 0 : stats.prizePoolAllocationPercent}%
-                    </span>
-                  </div>
-                  <div className="dash-goal-numbers">
-                    {formatMoney(stats.totalFeesRaw || 0)} / {formatMoney(stats.totalPrizeRaw || 0)} Collected
-                  </div>
-                  <div className="dash-progress-track">
-                    <div
-                      className="dash-progress-fill"
-                      style={{
-                        width: `${Math.min(100, Math.max(0, stats.prizePoolAllocationPercent || 0))}%`,
-                        background: "#d97706",
-                      }}
-                    />
-                  </div>
-                </div>
+                    );
+                  }
 
-                {/* Goal 3: Venues & Stadiums */}
-                <div className="dash-goal-item">
-                  <div className="dash-goal-header">
-                    <div className="dash-goal-title-group">
-                      <div className="dash-goal-icon-circle" style={{ background: "#ede9fe", color: "#7c3aed" }}>
-                        <Target size={16} />
+                  return upcomingList.map((t) => {
+                    const sport = sports.find((s) => s.id === t.sportId);
+                    const regCountdown = getRemainingCountdown(t.lastRegistrationDate || t.date);
+                    const kickoffCountdown = getRemainingCountdown(t.date);
+                    const fillPercent = Math.min(
+                      100,
+                      Math.round(((t.registeredTeams || 0) / (t.maxTeams || 16)) * 100)
+                    );
+
+                    return (
+                      <div
+                        key={t.id}
+                        style={{
+                          background: "#ffffff",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "12px",
+                          padding: "1rem",
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.75rem",
+                        }}
+                      >
+                        {/* Header: Title and Location */}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
+                          <div>
+                            <span style={{ fontWeight: 800, color: "#0f172a", fontSize: "0.95rem", display: "block" }}>
+                              {sport?.icon || "🏆"} {t.name}
+                            </span>
+                            <span style={{ fontSize: "0.78rem", color: "#64748b" }}>
+                              📍 {t.groundName ? `${t.groundName}, ` : ""}{t.location}
+                            </span>
+                          </div>
+                          <span
+                            style={{
+                              background: fillPercent >= 100 ? "#fee2e2" : "#ecfdf5",
+                              color: fillPercent >= 100 ? "#b91c1c" : "#047857",
+                              fontSize: "0.75rem",
+                              fontWeight: 700,
+                              padding: "0.15rem 0.5rem",
+                              borderRadius: "999px",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {fillPercent >= 100 ? "Quota Full" : "Registration Open"}
+                          </span>
+                        </div>
+
+                        {/* Dual Timers: Registration Deadline + Tournament Start */}
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            gap: "0.5rem",
+                            background: "#f8fafc",
+                            padding: "0.6rem 0.75rem",
+                            borderRadius: "8px",
+                            border: "1px solid #f1f5f9",
+                          }}
+                        >
+                          <div>
+                            <span style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 600, display: "block" }}>
+                              Last Registration Date
+                            </span>
+                            <span
+                              style={{
+                                fontSize: "0.82rem",
+                                fontWeight: 800,
+                                color: regCountdown.urgent ? "#dc2626" : "#0f172a",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                marginTop: "2px",
+                              }}
+                            >
+                              <Clock size={13} color={regCountdown.urgent ? "#dc2626" : "#059669"} />
+                              <span>{regCountdown.text}</span>
+                            </span>
+                          </div>
+
+                          <div>
+                            <span style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 600, display: "block" }}>
+                              Tournament Kickoff
+                            </span>
+                            <span
+                              style={{
+                                fontSize: "0.82rem",
+                                fontWeight: 800,
+                                color: "#0369a1",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                marginTop: "2px",
+                              }}
+                            >
+                              <Calendar size={13} color="#0284c7" />
+                              <span>Starts in {kickoffCountdown.text}</span>
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Capacity Progress Bar */}
+                        <div>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "#64748b", marginBottom: "4px" }}>
+                            <span>Squads Enrolled: <strong>{t.registeredTeams || 0} / {t.maxTeams || 16}</strong></span>
+                            <span style={{ fontWeight: 700, color: fillPercent >= 100 ? "#dc2626" : "#059669" }}>
+                              {fillPercent}% Quota
+                            </span>
+                          </div>
+                          <div style={{ width: "100%", height: "6px", background: "#e2e8f0", borderRadius: "999px", overflow: "hidden" }}>
+                            <div
+                              style={{
+                                width: `${fillPercent}%`,
+                                height: "100%",
+                                background: fillPercent >= 100 ? "#ef4444" : "linear-gradient(90deg, #10b981, #059669)",
+                                borderRadius: "999px",
+                                transition: "width 0.4s ease",
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Bottom Action Footer */}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "0.35rem" }}>
+                          <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#059669" }}>
+                            Prize: {formatMoney(t.prizeAmount)}
+                          </span>
+                          <button
+                            onClick={() => {
+                              setTeamTournamentFilter(t.id);
+                              setSelectedMenu("teams");
+                            }}
+                            className="dash-btn-secondary-pill"
+                            style={{ padding: "0.25rem 0.65rem", fontSize: "0.75rem", cursor: "pointer" }}
+                          >
+                            Manage Teams &rarr;
+                          </button>
+                        </div>
                       </div>
-                      <span className="dash-goal-name">Confirmed Stadium Venues</span>
-                    </div>
-                    <span className="dash-goal-percent">95%</span>
-                  </div>
-                  <div className="dash-goal-numbers">
-                    {stats.uniqueVenuesCount} Active Stadiums Allocated
-                  </div>
-                  <div className="dash-progress-track">
-                    <div
-                      className="dash-progress-fill"
-                      style={{ width: "95%", background: "#7c3aed" }}
-                    />
-                  </div>
-                </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
 
@@ -1839,7 +2543,31 @@ const Dashboard: React.FC = () => {
                               </div>
                             </td>
                             <td style={{ color: "#64748b", whiteSpace: "nowrap" }}>
-                              {t.date || "TBD"}
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "#1e293b" }}>{t.date || "TBD"}</span>
+                                {(() => {
+                                  const countdown = getRemainingCountdown(t.date);
+                                  if (t.status === "upcoming" || (!t.status && !countdown.expired)) {
+                                    return (
+                                      <span
+                                        style={{
+                                          fontSize: "0.72rem",
+                                          color: countdown.urgent ? "#dc2626" : "#0284c7",
+                                          fontWeight: 700,
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: "3px",
+                                        }}
+                                        title="Preparation countdown until tournament kickoff"
+                                      >
+                                        <Clock size={11} color={countdown.urgent ? "#dc2626" : "#0284c7"} />
+                                        <span>Starts in {countdown.text}</span>
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
                             </td>
                             <td style={{ fontWeight: 700, color: "#0f172a" }}>
                               {formatMoney(t.prizeAmount)}

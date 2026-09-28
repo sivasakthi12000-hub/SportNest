@@ -18,19 +18,111 @@ export interface SportThemeConfig {
   icon: string;
 }
 
-const DEFAULT_SPORT_IMAGES: Record<string, string> = {
-  soccer: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=1600&auto=format&fit=crop",
-  football: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=1600&auto=format&fit=crop",
-  basketball: "https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1600&auto=format&fit=crop",
-  tennis: "https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?q=80&w=1600&auto=format&fit=crop",
-  cricket: "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?q=80&w=1600&auto=format&fit=crop",
-  kabaddi: "https://images.unsplash.com/photo-1517649763962-0c623266ddc0?q=80&w=1600&auto=format&fit=crop",
-  volleyball: "https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?q=80&w=1600&auto=format&fit=crop",
-  hockey: "https://images.unsplash.com/photo-1580748141549-71748dbe0bdc?q=80&w=1600&auto=format&fit=crop",
-  badminton: "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1600&auto=format&fit=crop",
-  "table tennis": "https://images.unsplash.com/photo-1609710228159-0fa9bd7c0827?q=80&w=1600&auto=format&fit=crop",
-  swimming: "https://images.unsplash.com/photo-1530549387789-4c1017266635?q=80&w=1600&auto=format&fit=crop",
+export const SPORT_GROUND_ASSETS: Record<string, string> = {
+  soccer: "/src/assets/images/soccer_pitch_ground_1790617926895.jpg",
+  football: "/src/assets/images/soccer_pitch_ground_1790617926895.jpg",
+  basketball: "/src/assets/images/basketball_court_ground_1790617938397.jpg",
+  tennis: "/src/assets/images/tennis_court_ground_1790617949689.jpg",
+  cricket: "/src/assets/images/cricket_pitch_ground_1790617963173.jpg",
+  volleyball: "/src/assets/images/volleyball_court_ground_1790617974030.jpg",
+  badminton: "/src/assets/images/volleyball_court_ground_1790617974030.jpg",
+  kabaddi: "/src/assets/images/volleyball_court_ground_1790617974030.jpg",
+  hockey: "/src/assets/images/soccer_pitch_ground_1790617926895.jpg",
+  futsal: "/src/assets/images/soccer_pitch_ground_1790617926895.jpg",
 };
+
+const DEFAULT_SPORT_IMAGES: Record<string, string> = {
+  ...SPORT_GROUND_ASSETS,
+  "table tennis": "/src/assets/images/tennis_court_ground_1790617949689.jpg",
+  swimming: "/src/assets/images/volleyball_court_ground_1790617974030.jpg",
+};
+
+export const SPORT_PITCH_METAS: Record<
+  string,
+  {
+    headline: string;
+    subheadline: string;
+    quote: string;
+    groundName: string;
+    surfaceBadge: string;
+    accentColor: string;
+    badgeBg: string;
+  }
+> = {
+  soccer: {
+    headline: "BOUNCE THAT LIFTS",
+    subheadline: "EVERY FIELD TELLS A STORY",
+    quote: "Every court, every track, every field tells a different story. Each sport has its own rules, its own rhythm, its own kicks.",
+    groundName: "105m × 68m FIFA Natural Grass Pitch",
+    surfaceBadge: "🌱 Natural Grass Pitch",
+    accentColor: "#10b981",
+    badgeBg: "rgba(16, 185, 129, 0.2)",
+  },
+  football: {
+    headline: "BOUNCE THAT LIFTS",
+    subheadline: "EVERY FIELD TELLS A STORY",
+    quote: "Every court, every track, every field tells a different story. Each sport has its own rules, its own rhythm, its own kicks.",
+    groundName: "105m × 68m FIFA Natural Grass Pitch",
+    surfaceBadge: "🌱 Natural Grass Pitch",
+    accentColor: "#10b981",
+    badgeBg: "rgba(16, 185, 129, 0.2)",
+  },
+  basketball: {
+    headline: "BOUNCE THAT LIFTS",
+    subheadline: "EVERY COURT HAS ITS RHYTHM",
+    quote: "Every court, every track, every field tells a different story. Each sport has its own rules, its own rhythm, its own kicks.",
+    groundName: "28m × 15m Polished Hardwood Parquet",
+    surfaceBadge: "🪵 Hardwood Parquet",
+    accentColor: "#f97316",
+    badgeBg: "rgba(249, 115, 22, 0.2)",
+  },
+  tennis: {
+    headline: "BOUNCE THAT LIFTS",
+    subheadline: "EVERY BOUNCE DEMANDS PRECISION",
+    quote: "Every court, every track, every field tells a different story. Each sport has its own rules, its own rhythm, its own kicks.",
+    groundName: "23.77m × 8.23m Championship Clay Court",
+    surfaceBadge: "🎾 Terracotta Clay Court",
+    accentColor: "#eab308",
+    badgeBg: "rgba(234, 179, 8, 0.2)",
+  },
+  cricket: {
+    headline: "BOUNCE THAT LIFTS",
+    subheadline: "EVERY PITCH CARRIES GLORY",
+    quote: "Every court, every track, every field tells a different story. Each sport has its own rules, its own rhythm, its own kicks.",
+    groundName: "22-Yard Curated Clay Pitch & Oval Outfield",
+    surfaceBadge: "🏏 22-Yard Turf Wicket",
+    accentColor: "#0ea5e9",
+    badgeBg: "rgba(14, 165, 233, 0.2)",
+  },
+  volleyball: {
+    headline: "BOUNCE THAT LIFTS",
+    subheadline: "EVERY SPIKE DEFIES GRAVITY",
+    quote: "Every court, every track, every field tells a different story. Each sport has its own rules, its own rhythm, its own kicks.",
+    groundName: "18m × 9m FIVB Elastic Taraflex Court",
+    surfaceBadge: "🏐 Elastic Taraflex Surface",
+    accentColor: "#ec4899",
+    badgeBg: "rgba(236, 72, 153, 0.2)",
+  },
+  badminton: {
+    headline: "BOUNCE THAT LIFTS",
+    subheadline: "EVERY SHUTTLE FLIES TRUE",
+    quote: "Every court, every track, every field tells a different story. Each sport has its own rules, its own rhythm, its own kicks.",
+    groundName: "13.4m × 6.1m BWF Synthetic Mat",
+    surfaceBadge: "🏸 BWF Non-Slip Synthetic Mat",
+    accentColor: "#8b5cf6",
+    badgeBg: "rgba(139, 92, 246, 0.2)",
+  },
+};
+
+export function getSportPitchMeta(sportName?: string) {
+  const key = String(sportName || "").toLowerCase().trim();
+  const base = SPORT_PITCH_METAS[key] || SPORT_PITCH_METAS.soccer;
+  const groundImage = getSportGroundImage(sportName);
+  return {
+    ...base,
+    groundImage,
+  };
+}
 
 export const SPORT_ICONS_MAP: Record<string, string> = {
   soccer: "⚽",

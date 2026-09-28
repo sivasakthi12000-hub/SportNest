@@ -344,8 +344,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem("sportsnest_active_admin_session");
       sessionStorage.removeItem(STORAGE_KEY);
       sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem("sportsnest_deliberate_home");
     } catch (e) {
       console.error("Failed to remove auth items:", e);
     }

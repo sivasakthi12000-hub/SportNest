@@ -25,7 +25,7 @@ export interface LiveMatch {
   round: string;
   teamA: TeamCombatant;
   teamB: TeamCombatant;
-  status: "live" | "today" | "completed" | "disputed";
+  status: "live" | "today" | "completed" | "disputed" | "upcoming";
   statusLabel: string;
   timeDisplay: string;
   matchTimePill?: string; // e.g. "17H30" or "LIVE"

@@ -41,16 +41,31 @@ const Navbar = () => {
   }
 
   const handleLogout = () => {
+    try {
+      localStorage.removeItem("sportsnest_active_admin_session");
+      sessionStorage.removeItem("sportsnest_deliberate_home");
+    } catch {}
     logout();
     setShowUserMenu(false);
     navigate("/");
+  };
+
+  const handleLogoClick = () => {
+    try {
+      sessionStorage.setItem("sportsnest_deliberate_home", "true");
+    } catch {}
   };
 
   return (
     <nav className="navbar" id="app-primary-navbar">
       {/* Brand Logo with Energetic Field Badge */}
       <div className="navbar-logo">
-        <Link to="/" className="logo-link" style={{ textDecoration: "none" }}>
+        <Link
+          to="/"
+          className="logo-link"
+          style={{ textDecoration: "none" }}
+          onClick={handleLogoClick}
+        >
           <SportsNestLogo size="md" theme="light" />
         </Link>
       </div>
@@ -60,7 +75,10 @@ const Navbar = () => {
         <Link
           to="/"
           className={`nav-item ${location.pathname === "/" ? "nav-item-active" : ""}`}
-          onClick={() => setMobileMenuOpen(false)}
+          onClick={() => {
+            handleLogoClick();
+            setMobileMenuOpen(false);
+          }}
         >
           Home
         </Link>
@@ -229,7 +247,13 @@ const Navbar = () => {
                 <Link
                   to="/dashboard"
                   className="nav-user-dropdown-item"
-                  onClick={() => setShowUserMenu(false)}
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    try {
+                      sessionStorage.removeItem("sportsnest_deliberate_home");
+                      localStorage.setItem("sportsnest_active_admin_session", "true");
+                    } catch {}
+                  }}
                 >
                   <LayoutDashboard size={15} />
                   <span>Admin Dashboard</span>

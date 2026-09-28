@@ -9,6 +9,7 @@ import {
 export interface Sport {
   id: number;
   name: string;
+  icon?: string;
   image?: string;
   imageUrl?: string;
   bannerUrl?: string;
@@ -34,9 +35,19 @@ export function normalizeSport(s: any): Sport {
     s.photo ||
     "";
 
+  const sportName = (s.name || s.sport_name || "").toLowerCase();
+  let defaultIcon = "🏆";
+  if (sportName.includes("soccer") || sportName.includes("football")) defaultIcon = "⚽";
+  else if (sportName.includes("basket")) defaultIcon = "🏀";
+  else if (sportName.includes("tennis")) defaultIcon = "🎾";
+  else if (sportName.includes("cricket")) defaultIcon = "🏏";
+  else if (sportName.includes("badminton")) defaultIcon = "🏸";
+  else if (sportName.includes("volley")) defaultIcon = "🏐";
+
   return {
     id: Number(s.id),
     name: s.name || s.sport_name || "",
+    icon: s.icon || defaultIcon,
     image,
     imageUrl: image,
     bannerUrl: image,
