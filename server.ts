@@ -1222,6 +1222,9 @@ async function startServer() {
     });
   });
 
+  // Explicitly serve /public directory for static images (grounds, icons, etc.)
+  app.use(express.static(path.join(process.cwd(), "public")));
+
   // Vite middleware for development vs static serve for production
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

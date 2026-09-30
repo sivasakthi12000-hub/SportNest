@@ -19,22 +19,22 @@ export interface SportThemeConfig {
 }
 
 export const SPORT_GROUND_ASSETS: Record<string, string> = {
-  soccer: "/src/assets/images/soccer_pitch_ground_1790617926895.jpg",
-  football: "/src/assets/images/soccer_pitch_ground_1790617926895.jpg",
-  basketball: "/src/assets/images/basketball_court_ground_1790617938397.jpg",
-  tennis: "/src/assets/images/tennis_court_ground_1790617949689.jpg",
-  cricket: "/src/assets/images/cricket_pitch_ground_1790617963173.jpg",
-  volleyball: "/src/assets/images/volleyball_court_ground_1790617974030.jpg",
-  badminton: "/src/assets/images/volleyball_court_ground_1790617974030.jpg",
-  kabaddi: "/src/assets/images/volleyball_court_ground_1790617974030.jpg",
-  hockey: "/src/assets/images/soccer_pitch_ground_1790617926895.jpg",
-  futsal: "/src/assets/images/soccer_pitch_ground_1790617926895.jpg",
+  soccer: "/grounds/soccer.jpg",
+  football: "/grounds/soccer.jpg",
+  basketball: "/grounds/basketball.jpg",
+  tennis: "/grounds/tennis.jpg",
+  cricket: "/grounds/cricket.jpg",
+  volleyball: "/grounds/volleyball.jpg",
+  badminton: "/grounds/badminton.jpg",
+  kabaddi: "/grounds/kabaddi.jpg",
+  hockey: "/grounds/hockey.jpg",
+  futsal: "/grounds/futsal.jpg",
 };
 
 const DEFAULT_SPORT_IMAGES: Record<string, string> = {
   ...SPORT_GROUND_ASSETS,
-  "table tennis": "/src/assets/images/tennis_court_ground_1790617949689.jpg",
-  swimming: "/src/assets/images/volleyball_court_ground_1790617974030.jpg",
+  "table tennis": "/grounds/tennis.jpg",
+  swimming: "/grounds/volleyball.jpg",
 };
 
 export const SPORT_PITCH_METAS: Record<
@@ -180,7 +180,7 @@ export function getTournamentVisual(
   ];
 
   for (const c of candidates) {
-    if (typeof c === "string" && c.trim().startsWith("http")) {
+    if (typeof c === "string" && (c.trim().startsWith("http") || c.trim().startsWith("/"))) {
       return {
         imageUrl: c.trim(),
         isCustom: true,

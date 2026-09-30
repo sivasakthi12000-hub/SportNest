@@ -59,6 +59,7 @@ import {
 import { AdminTournamentsView } from "../components/admin/AdminTournamentsView";
 import { AdminTeamsView } from "../components/admin/AdminTeamsView";
 import { AdminSportsView } from "../components/admin/AdminSportsView";
+import { SportPitchCard } from "../components/SportPitchCard";
 import { AdminBracketsView } from "../components/admin/AdminBracketsView";
 import { AdminRegistrationsView } from "../components/admin/AdminRegistrationsView";
 import { AdminLeaderboardView } from "../components/admin/AdminLeaderboardView";
@@ -273,6 +274,74 @@ const Dashboard: React.FC = () => {
     };
   }, [isSuperAdmin, tournaments, visibleTournaments, organizerTeamsCount]);
 
+  // Transparent sport-based prize breakdown for tracking how Total Prize Pool is calculated
+  const [showPrizeBreakdownModal, setShowPrizeBreakdownModal] = useState(false);
+
+  const sportsPrizeBreakdown = useMemo(() => {
+    const list = isSuperAdmin ? tournaments : visibleTournaments;
+    const map: Record<
+      string,
+      {
+        sportId: number;
+        sportName: string;
+        icon: string;
+        totalPrize: number;
+        tournamentsCount: number;
+        tournaments: Array<{ id: number; name: string; prize: number; location: string }>;
+      }
+    > = {};
+
+    const sportIconMap: Record<string, string> = {
+      soccer: "⚽",
+      football: "⚽",
+      basketball: "🏀",
+      tennis: "🎾",
+      cricket: "🏏",
+      badminton: "🏸",
+      volleyball: "🏐",
+      baseball: "⚾",
+      kabaddi: "🤼",
+      hockey: "🏑",
+    };
+
+    list.forEach((t) => {
+      const sId = Number(t.sportId) || 1;
+      const foundSport = sports.find((s) => Number(s.id) === sId);
+      const sName = foundSport ? foundSport.name : (t.sportName || "Sports");
+      const key = sName.toLowerCase().trim();
+      const icon = foundSport?.icon || sportIconMap[key] || "🏆";
+
+      if (!map[key]) {
+        map[key] = {
+          sportId: sId,
+          sportName: sName,
+          icon,
+          totalPrize: 0,
+          tournamentsCount: 0,
+          tournaments: [],
+        };
+      }
+      const prize = Number(t.prizeAmount) || 0;
+      map[key].totalPrize += prize;
+      map[key].tournamentsCount += 1;
+      map[key].tournaments.push({
+        id: t.id,
+        name: t.name,
+        prize,
+        location: t.location || t.district || "",
+      });
+    });
+
+    const totalSum = list.reduce((acc, t) => acc + (Number(t.prizeAmount) || 0), 0);
+    const sorted = Object.values(map).sort((a, b) => b.totalPrize - a.totalPrize);
+
+    return {
+      items: sorted,
+      totalSum,
+      tournamentsCount: list.length,
+    };
+  }, [isSuperAdmin, tournaments, visibleTournaments, sports]);
+
   // Calculate 12-month data scoped to visibleTournaments
   const monthlyChartData = useMemo(() => {
     const monthlySums = Array(12).fill(0);
@@ -340,6 +409,8 @@ const Dashboard: React.FC = () => {
         id: s.id,
         name: s.name,
         icon: s.icon || sportIconMap[s.name] || "🏆",
+        surface: s.surface,
+        groundName: s.groundName,
         tournamentsCount: countsMap[s.id]?.count || 0,
         totalPrize: countsMap[s.id]?.prize || 0,
         status: "Active",
@@ -1421,11 +1492,87 @@ const Dashboard: React.FC = () => {
                   )}
                 </div>
 
-                <div className="dash-trend-pill positive" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10b981", display: "inline-block" }}></span>
-                  <span style={{ fontWeight: 600 }}>
-                    {isSuperAdmin ? "Live Supabase Database Sync" : `${visibleTournaments.length} Active Events Hosted`}
-                  </span>
+                {/* Sports Based Prizes Pill Strip */}
+                {sportsPrizeBreakdown.items.length > 0 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "5px",
+                      margin: "0.5rem 0",
+                    }}
+                  >
+                    {sportsPrizeBreakdown.items.slice(0, 3).map((item) => (
+                      <span
+                        key={item.sportId}
+                        onClick={() => setShowPrizeBreakdownModal(true)}
+                        style={{
+                          fontSize: "0.72rem",
+                          fontWeight: 700,
+                          background: "#ecfdf5",
+                          color: "#065f46",
+                          padding: "2px 7px",
+                          borderRadius: "999px",
+                          border: "1px solid #a7f3d0",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                        title={`Click to view ${item.sportName} prize calculation`}
+                      >
+                        <span>{item.icon}</span>
+                        <span>{item.sportName}:</span>
+                        <span style={{ fontWeight: 800 }}>{formatMoney(item.totalPrize)}</span>
+                      </span>
+                    ))}
+                    {sportsPrizeBreakdown.items.length > 3 && (
+                      <span
+                        onClick={() => setShowPrizeBreakdownModal(true)}
+                        style={{
+                          fontSize: "0.72rem",
+                          fontWeight: 700,
+                          background: "#f1f5f9",
+                          color: "#475569",
+                          padding: "2px 7px",
+                          borderRadius: "999px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        +{sportsPrizeBreakdown.items.length - 3} more &rarr;
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "6px" }}>
+                  <div className="dash-trend-pill positive" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10b981", display: "inline-block" }}></span>
+                    <span style={{ fontWeight: 600 }}>
+                      {isSuperAdmin ? "Live Supabase Database Sync" : `${visibleTournaments.length} Active Events Hosted`}
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => setShowPrizeBreakdownModal(true)}
+                    type="button"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#059669",
+                      fontSize: "0.74rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      padding: "2px 0",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      textDecoration: "underline",
+                    }}
+                    title="View exact formula and sport-by-sport prize contributions"
+                  >
+                    <span>Track Sports & Calculation &rarr;</span>
+                  </button>
                 </div>
               </div>
 
@@ -1807,28 +1954,27 @@ const Dashboard: React.FC = () => {
                       <div
                         key={i}
                         className="dash-wallet-card dash-skeleton-pulse"
-                        style={{ height: "105px" }}
+                        style={{ height: "155px" }}
                       />
                     ))
                 ) : topSportsCards.length > 0 ? (
                   topSportsCards.map((sport) => (
-                    <div key={sport.id} className="dash-wallet-card">
-                      <div className="dash-wallet-top">
-                        <div className="dash-sport-badge">
-                          <span className="dash-sport-icon">{sport.icon}</span>
-                          <span>{sport.name}</span>
-                        </div>
-                        <button className="dash-three-dots" title="More">
-                          <MoreVertical size={14} />
-                        </button>
-                      </div>
-                      <div>
-                        <p className="dash-wallet-val">
-                          {sport.tournamentsCount} <span style={{ fontSize: "0.85rem", fontWeight: 500, color: "#64748b" }}>Tournaments</span>
-                        </p>
-                        <p className="dash-wallet-status">● {formatMoney(sport.totalPrize)} Prize Pool</p>
-                      </div>
-                    </div>
+                    <SportPitchCard
+                      key={sport.id}
+                      sport={{
+                        id: sport.id,
+                        name: sport.name,
+                        surface: sport.surface,
+                        groundName: sport.groundName,
+                      }}
+                      stats={{
+                        count: sport.tournamentsCount,
+                        prize: sport.totalPrize,
+                        teams: 0,
+                      }}
+                      variant="admin-card"
+                      onClick={() => setSelectedMenu("sports")}
+                    />
                   ))
                 ) : (
                   <p style={{ color: "#64748b", fontSize: "0.9rem" }}>No sports registered yet.</p>
@@ -2621,6 +2767,242 @@ const Dashboard: React.FC = () => {
       )}
     </main>
   </div>
+
+    {/* Sports Based Total Prize Pool Calculation Modal */}
+    {showPrizeBreakdownModal && (
+      <div
+        className="admin-modal-overlay"
+        style={{
+          position: "fixed",
+          inset: 0,
+          backgroundColor: "rgba(15, 23, 42, 0.7)",
+          backdropFilter: "blur(4px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 99999,
+          padding: "1rem",
+        }}
+      >
+        <div
+          className="admin-modal-card"
+          style={{
+            background: "#ffffff",
+            borderRadius: "16px",
+            width: "100%",
+            maxWidth: "680px",
+            maxHeight: "90vh",
+            display: "flex",
+            flexDirection: "column",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+            overflow: "hidden",
+            border: "1px solid #e2e8f0",
+          }}
+        >
+          {/* Header */}
+          <div
+            style={{
+              padding: "1.25rem 1.5rem",
+              borderBottom: "1px solid #e2e8f0",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: "#f8fafc",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+              <div
+                style={{
+                  width: "40px",
+                  height: "40px",
+                  borderRadius: "10px",
+                  background: "rgba(16, 185, 129, 0.12)",
+                  color: "#059669",
+                  display: "grid",
+                  placeItems: "center",
+                }}
+              >
+                <DollarSign size={22} />
+              </div>
+              <div>
+                <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#0f172a" }}>
+                  Total Prize Pool Calculation Tracker
+                </h2>
+                <span style={{ fontSize: "0.8rem", color: "#64748b" }}>
+                  Live breakdown of prize commitments categorized by sport
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowPrizeBreakdownModal(false)}
+              style={{
+                background: "#f1f5f9",
+                border: "none",
+                borderRadius: "8px",
+                width: "32px",
+                height: "32px",
+                cursor: "pointer",
+                fontSize: "1.1rem",
+                color: "#64748b",
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Modal Body */}
+          <div style={{ padding: "1.5rem", overflowY: "auto", flex: 1 }}>
+            {/* Calculation Formula Banner */}
+            <div
+              style={{
+                background: "linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)",
+                border: "1px solid #a7f3d0",
+                borderRadius: "12px",
+                padding: "1rem 1.25rem",
+                marginBottom: "1.25rem",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+                <div>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#047857", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    CALCULATION FORMULA
+                  </span>
+                  <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#065f46", marginTop: "2px" }}>
+                    Total Prize Pool = Σ (Prize Pool for each active sanctioned tournament)
+                  </div>
+                  <p style={{ margin: "4px 0 0", fontSize: "0.8rem", color: "#047857" }}>
+                    {isSuperAdmin
+                      ? "Calculated across all sanctioned tournaments across all sports in Supabase."
+                      : "Calculated across all sanctioned tournaments hosted under your account."}
+                  </p>
+                </div>
+
+                <div style={{ textAlign: "right" }}>
+                  <span style={{ fontSize: "0.75rem", color: "#047857", fontWeight: 600 }}>Total Calculated</span>
+                  <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "#065f46" }}>
+                    {formatMoney(stats.totalPrizeRaw)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sports Table */}
+            <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.75rem" }}>
+              Sports Breakdown ({sportsPrizeBreakdown.items.length} Disciplines)
+            </h3>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+              {sportsPrizeBreakdown.items.map((item) => {
+                const percent =
+                  stats.totalPrizeRaw > 0
+                    ? Math.round((item.totalPrize / stats.totalPrizeRaw) * 100)
+                    : 0;
+
+                return (
+                  <div
+                    key={item.sportId}
+                    style={{
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "10px",
+                      padding: "0.85rem 1rem",
+                      background: "#ffffff",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.4rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <span style={{ fontSize: "1.3rem" }}>{item.icon}</span>
+                        <div>
+                          <span style={{ fontWeight: 800, color: "#0f172a", fontSize: "0.95rem" }}>
+                            {item.sportName}
+                          </span>
+                          <span style={{ fontSize: "0.75rem", color: "#64748b", marginLeft: "6px" }}>
+                            ({item.tournamentsCount} {item.tournamentsCount === 1 ? "tournament" : "tournaments"})
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ textAlign: "right" }}>
+                        <span style={{ fontWeight: 800, color: "#0f172a", fontSize: "1rem" }}>
+                          {formatMoney(item.totalPrize)}
+                        </span>
+                        <span style={{ fontSize: "0.75rem", color: "#059669", fontWeight: 700, marginLeft: "6px" }}>
+                          ({percent}%)
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div
+                      style={{
+                        height: "6px",
+                        background: "#f1f5f9",
+                        borderRadius: "999px",
+                        overflow: "hidden",
+                        marginBottom: "0.6rem",
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${percent}%`,
+                          background: "#10b981",
+                          borderRadius: "999px",
+                        }}
+                      />
+                    </div>
+
+                    {/* Tournaments List for this Sport */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      {item.tournaments.map((t) => (
+                        <div
+                          key={t.id}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            fontSize: "0.78rem",
+                            color: "#475569",
+                            padding: "2px 0",
+                          }}
+                        >
+                          <span style={{ fontWeight: 600 }}>&bull; {t.name}</span>
+                          <span style={{ fontWeight: 700, color: "#0f172a" }}>{formatMoney(t.prize)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {sportsPrizeBreakdown.items.length === 0 && (
+                <div style={{ textAlign: "center", padding: "2rem", color: "#64748b" }}>
+                  No tournament prizes recorded yet. Create a tournament to begin tracking.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div
+            style={{
+              padding: "1rem 1.5rem",
+              borderTop: "1px solid #e2e8f0",
+              background: "#f8fafc",
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
+            <button
+              onClick={() => setShowPrizeBreakdownModal(false)}
+              className="admin-btn-primary"
+              style={{ padding: "0.55rem 1.25rem" }}
+            >
+              Done Tracking
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* Supabase Connected Create Tournament Modal */}
     {showCreateModal && (

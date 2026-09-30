@@ -18,9 +18,12 @@ import {
   ChevronsLeft,
   ChevronsRight,
   BookOpen,
+  AlertTriangle,
 } from "lucide-react";
 import { Tournament, Sport, updateTournament, deleteTournament } from "../../services/dataService";
 import { WysiwygEditor } from "../WysiwygEditor";
+import { TournamentFeasibilityCalculator } from "../TournamentFeasibilityCalculator";
+import { analyzeScheduleFeasibility, TournamentFormatType } from "../../services/scheduleFeasibilityService";
 
 interface AdminTournamentsViewProps {
   tournaments: Tournament[];
@@ -62,6 +65,39 @@ export const AdminTournamentsView: React.FC<AdminTournamentsViewProps> = ({
   const [editMapUrl, setEditMapUrl] = useState<string>("");
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
 
+  // Feasibility Check state for Edit Modal (Requirement 1: Auto-filled from registrations if editing)
+  const [editTeams, setEditTeams] = useState<number>(16);
+  const [editFormat, setEditFormat] = useState<TournamentFormatType>("Single Elimination (Knockout)");
+  const [editVenues, setEditVenues] = useState<number>(1);
+  const [editDurationDays, setEditDurationDays] = useState<number>(1);
+  const [editMatchDurationMinutes, setEditMatchDurationMinutes] = useState<number>(60);
+  const [editPlayableHoursPerDay, setEditPlayableHoursPerDay] = useState<number>(9);
+  const [editNumGroups, setEditNumGroups] = useState<number>(4);
+  const [editAdvancingPerGroup, setEditAdvancingPerGroup] = useState<number>(2);
+  const [editFeasibilityWarningDialog, setEditFeasibilityWarningDialog] = useState<boolean>(false);
+
+  const editFeasibilityData = useMemo(() => {
+    return analyzeScheduleFeasibility({
+      teams: Math.max(2, Number(editTeams) || 16),
+      venues: Math.max(1, Number(editVenues) || 1),
+      durationDays: Math.max(1, Number(editDurationDays) || 1),
+      matchDurationMinutes: Math.max(15, Number(editMatchDurationMinutes) || 60),
+      playableHoursPerDay: Math.max(1, Math.min(24, Number(editPlayableHoursPerDay) || 9)),
+      format: editFormat,
+      numGroups: Math.max(2, Number(editNumGroups) || 4),
+      advancingPerGroup: Math.max(1, Number(editAdvancingPerGroup) || 2),
+    });
+  }, [
+    editTeams,
+    editVenues,
+    editDurationDays,
+    editMatchDurationMinutes,
+    editPlayableHoursPerDay,
+    editFormat,
+    editNumGroups,
+    editAdvancingPerGroup,
+  ]);
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
@@ -86,13 +122,30 @@ export const AdminTournamentsView: React.FC<AdminTournamentsViewProps> = ({
     setEditMaxTeams(t.maxTeams || 16);
     setEditRules(t.rules || "");
     setEditMapUrl(t.mapUrl || "");
+
+    // Auto-fill from registeredTeams or maxTeams
+    const teamsCount = t.registeredTeams && t.registeredTeams > 0 ? t.registeredTeams : (t.maxTeams || 16);
+    setEditTeams(teamsCount);
+    setEditFormat((t.format as TournamentFormatType) || "Single Elimination (Knockout)");
+    setEditVenues(t.venues || 1);
+    setEditDurationDays(t.durationDays || 1);
+    setEditMatchDurationMinutes(t.matchDurationMinutes || 60);
+    setEditPlayableHoursPerDay(t.playableHoursPerDay || 9);
+    setEditNumGroups(t.numGroups || 4);
+    setEditAdvancingPerGroup(t.advancingPerGroup || 2);
   };
 
-  const handleSaveEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveEdit = async (e?: React.FormEvent, bypassFeasibility = false) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (!editingTournament) return;
     if (!editName.trim()) {
       showToast("Tournament name is required", "error");
+      return;
+    }
+
+    // Feasibility Confirmation Dialog (Requirement 3)
+    if (!editFeasibilityData.isFeasible && !bypassFeasibility) {
+      setEditFeasibilityWarningDialog(true);
       return;
     }
 
@@ -112,6 +165,16 @@ export const AdminTournamentsView: React.FC<AdminTournamentsViewProps> = ({
         maxTeams: Number(editMaxTeams),
         rules: editRules.trim(),
         mapUrl: editMapUrl.trim(),
+        format: editFormat,
+        venues: Number(editVenues),
+        durationDays: Number(editDurationDays),
+        matchDurationMinutes: Number(editMatchDurationMinutes),
+        playableHoursPerDay: Number(editPlayableHoursPerDay),
+        numGroups: editFormat === "Group Stage + Knockout" ? Number(editNumGroups) : undefined,
+        advancingPerGroup: editFormat === "Group Stage + Knockout" ? Number(editAdvancingPerGroup) : undefined,
+        isFeasible: editFeasibilityData.isFeasible,
+        requiredMatches: editFeasibilityData.requiredMatches,
+        calculatedCapacity: editFeasibilityData.capacity,
       });
 
       if (res.success) {
@@ -856,6 +919,32 @@ export const AdminTournamentsView: React.FC<AdminTournamentsViewProps> = ({
                 />
               </div>
 
+              {/* Row 5B: Tournament Format Feasibility Check */}
+              <div style={{ marginTop: "0.5rem", marginBottom: "0.5rem" }} id="admin-edit-feasibility-section">
+                <TournamentFeasibilityCalculator
+                  teams={editTeams}
+                  onTeamsChange={(val) => {
+                    setEditTeams(val);
+                    setEditMaxTeams(val);
+                  }}
+                  venues={editVenues}
+                  onVenuesChange={setEditVenues}
+                  durationDays={editDurationDays}
+                  onDurationDaysChange={setEditDurationDays}
+                  matchDurationMinutes={editMatchDurationMinutes}
+                  onMatchDurationMinutesChange={setEditMatchDurationMinutes}
+                  playableHoursPerDay={editPlayableHoursPerDay}
+                  onPlayableHoursPerDayChange={setEditPlayableHoursPerDay}
+                  format={editFormat}
+                  onFormatChange={setEditFormat}
+                  numGroups={editNumGroups}
+                  onNumGroupsChange={setEditNumGroups}
+                  advancingPerGroup={editAdvancingPerGroup}
+                  onAdvancingPerGroupChange={setEditAdvancingPerGroup}
+                  isRegisteredCount={editingTournament?.registeredTeams}
+                />
+              </div>
+
               {/* Row 6: WYSIWYG KITCHEN SINK EDITOR FOR DISCIPLINE RULES */}
               <div>
                 <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.85rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.4rem" }}>
@@ -922,6 +1011,132 @@ export const AdminTournamentsView: React.FC<AdminTournamentsViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Dialog if Edit Feasibility Check Fails (Requirement 3) */}
+      {editFeasibilityWarningDialog && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.8)",
+            backdropFilter: "blur(4px)",
+            zIndex: 100000,
+            display: "grid",
+            placeItems: "center",
+            padding: "1rem",
+          }}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "16px",
+              maxWidth: "500px",
+              width: "100%",
+              padding: "1.5rem",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.35)",
+              border: "1px solid #fee2e2",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
+              <div
+                style={{
+                  width: "42px",
+                  height: "42px",
+                  borderRadius: "10px",
+                  background: "#fef2f2",
+                  color: "#dc2626",
+                  display: "grid",
+                  placeItems: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <AlertTriangle size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800, color: "#991b1b" }}>
+                  Schedule May Not Fit!
+                </h3>
+                <span style={{ fontSize: "0.78rem", color: "#64748b" }}>
+                  Tournament Format Feasibility Warning
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: "0.88rem", color: "#334155", lineHeight: 1.5, marginBottom: "1rem" }}>
+              The updated format <strong>"{editFormat}"</strong> requires{" "}
+              <strong style={{ color: "#dc2626" }}>{editFeasibilityData.requiredMatches} matches</strong>,
+              but only <strong>{editFeasibilityData.capacity} matches</strong> can be played with current venue and time limits
+              ({editFeasibilityData.deficit} match deficit).
+            </p>
+
+            <div
+              style={{
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                borderRadius: "8px",
+                padding: "0.75rem",
+                marginBottom: "1.25rem",
+                fontSize: "0.8rem",
+                color: "#475569",
+              }}
+            >
+              <strong style={{ color: "#0f172a", display: "block", marginBottom: "0.25rem" }}>
+                Organizer Suggestions:
+              </strong>
+              <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
+                {editFeasibilityData.suggestions.map((s, idx) => (
+                  <li key={idx} style={{ marginBottom: "0.2rem" }}>
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div style={{ display: "flex", gap: "0.6rem", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditFeasibilityWarningDialog(false);
+                  const el = document.getElementById("admin-edit-feasibility-section");
+                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                }}
+                style={{
+                  padding: "0.55rem 1rem",
+                  borderRadius: "8px",
+                  border: "1px solid #cbd5e1",
+                  background: "#ffffff",
+                  color: "#334155",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  cursor: "pointer",
+                }}
+              >
+                Adjust Settings
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditFeasibilityWarningDialog(false);
+                  handleSaveEdit(undefined, true);
+                }}
+                style={{
+                  padding: "0.55rem 1.15rem",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: "#dc2626",
+                  color: "#ffffff",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  cursor: "pointer",
+                }}
+              >
+                Continue Anyway
+              </button>
+            </div>
           </div>
         </div>
       )}

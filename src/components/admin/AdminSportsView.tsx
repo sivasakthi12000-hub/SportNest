@@ -33,6 +33,7 @@ import {
   updateSport,
 } from "../../services/dataService";
 import { WysiwygEditor } from "../WysiwygEditor";
+import { getSportPitchMeta, SPORT_ICONS_MAP } from "../../utils/visualTheme";
 
 interface AdminSportsViewProps {
   sports: Sport[];
@@ -838,7 +839,7 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
                           flexShrink: 0,
                         }}
                       >
-                        🏆
+                        {SPORT_ICONS_MAP[s.name.toLowerCase()] || "🏆"}
                       </div>
                       <div>
                         <h3
@@ -906,6 +907,66 @@ export const AdminSportsView: React.FC<AdminSportsViewProps> = ({
                       </button>
                     </div>
                   </div>
+
+                  {/* 3D Pitch Ground Diorama Preview (Clean ground, no shoe) */}
+                  {(() => {
+                    const pMeta = getSportPitchMeta(s.name);
+                    const gImg = s.image || s.imageUrl || pMeta.groundImage;
+                    return (
+                      <div
+                        style={{
+                          position: "relative",
+                          width: "100%",
+                          height: "125px",
+                          borderRadius: "10px",
+                          overflow: "hidden",
+                          margin: "0.1rem 0 0.85rem 0",
+                          background: "#09101a",
+                          boxShadow: "0 3px 10px rgba(0,0,0,0.06)",
+                        }}
+                      >
+                        <img
+                          src={gImg}
+                          alt={`${s.name} Pitch Ground`}
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = "/grounds/soccer.jpg";
+                          }}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            objectPosition: "center 45%",
+                            transition: "transform 0.4s ease",
+                          }}
+                        />
+                        <div
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            background:
+                              "linear-gradient(180deg, transparent 35%, rgba(7, 13, 20, 0.85) 100%)",
+                          }}
+                        />
+                        <span
+                          style={{
+                            position: "absolute",
+                            bottom: "6px",
+                            left: "8px",
+                            fontSize: "0.7rem",
+                            fontWeight: 700,
+                            color: "#ffffff",
+                            background: "rgba(0, 0, 0, 0.65)",
+                            padding: "2px 7px",
+                            borderRadius: "999px",
+                            backdropFilter: "blur(4px)",
+                          }}
+                        >
+                          {pMeta.surfaceBadge}
+                        </span>
+                      </div>
+                    );
+                  })()}
 
                   {/* Card Meta */}
                   <div

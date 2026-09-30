@@ -1,8 +1,11 @@
-import React, { useState } from "react";
-import { Plus, Trash2, Trophy, MapPin, Navigation, ExternalLink } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { Plus, Trash2, Trophy, MapPin, Navigation, ExternalLink, AlertTriangle } from "lucide-react";
 import { Sport, createTournament } from "../../services/dataService";
 import { useAuth } from "../../context/AuthContext";
 import { WysiwygEditor } from "../WysiwygEditor";
+import { getSportPitchMeta } from "../../utils/visualTheme";
+import { TournamentFeasibilityCalculator } from "../TournamentFeasibilityCalculator";
+import { analyzeScheduleFeasibility, TournamentFormatType } from "../../services/scheduleFeasibilityService";
 
 interface AdminCreateTournamentModalProps {
   sports: Sport[];
@@ -46,6 +49,38 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Feasibility Check state
+  const [venues, setVenues] = useState(1);
+  const [durationDays, setDurationDays] = useState(1);
+  const [matchDurationMinutes, setMatchDurationMinutes] = useState(60);
+  const [playableHoursPerDay, setPlayableHoursPerDay] = useState(9);
+  const [tournamentFormat, setTournamentFormat] = useState<TournamentFormatType>("Single Elimination (Knockout)");
+  const [numGroups, setNumGroups] = useState(4);
+  const [advancingPerGroup, setAdvancingPerGroup] = useState(2);
+  const [feasibilityWarningDialog, setFeasibilityWarningDialog] = useState(false);
+
+  const feasibilityData = useMemo(() => {
+    return analyzeScheduleFeasibility({
+      teams: Math.max(2, Number(maxTeams) || 16),
+      venues: Math.max(1, Number(venues) || 1),
+      durationDays: Math.max(1, Number(durationDays) || 1),
+      matchDurationMinutes: Math.max(15, Number(matchDurationMinutes) || 60),
+      playableHoursPerDay: Math.max(1, Math.min(24, Number(playableHoursPerDay) || 9)),
+      format: tournamentFormat,
+      numGroups: Math.max(2, Number(numGroups) || 4),
+      advancingPerGroup: Math.max(1, Number(advancingPerGroup) || 2),
+    });
+  }, [
+    maxTeams,
+    venues,
+    durationDays,
+    matchDurationMinutes,
+    playableHoursPerDay,
+    tournamentFormat,
+    numGroups,
+    advancingPerGroup,
+  ]);
+
   // Multi-tier prize distribution
   const [prizes, setPrizes] = useState([
     { position: "1st Prize 🥇", amount: 25000 },
@@ -80,14 +115,20 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
     setPrizes((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent, bypassFeasibility = false) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (!name.trim() || !location.trim()) {
       setErrorMsg("Tournament name and location are required.");
       return;
     }
     if (!address.trim() || !pincode.trim()) {
       setErrorMsg("Venue address and 6-digit pincode are required for map & filtering.");
+      return;
+    }
+
+    // Feasibility Confirmation Check (Requirement 3)
+    if (!feasibilityData.isFeasible && !bypassFeasibility) {
+      setFeasibilityWarningDialog(true);
       return;
     }
 
@@ -114,6 +155,16 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
         description: description.trim() || "Sanctioned competition registered via SportsNest Admin.",
         rules: rules.trim() || undefined,
         createdBy: user?.username || "admin",
+        format: tournamentFormat,
+        venues: Number(venues),
+        durationDays: Number(durationDays),
+        matchDurationMinutes: Number(matchDurationMinutes),
+        playableHoursPerDay: Number(playableHoursPerDay),
+        numGroups: tournamentFormat === "Group Stage + Knockout" ? Number(numGroups) : undefined,
+        advancingPerGroup: tournamentFormat === "Group Stage + Knockout" ? Number(advancingPerGroup) : undefined,
+        isFeasible: feasibilityData.isFeasible,
+        requiredMatches: feasibilityData.requiredMatches,
+        calculatedCapacity: feasibilityData.capacity,
       });
 
       if (res.success) {
@@ -239,6 +290,69 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
                 />
               </div>
             </div>
+
+            {/* Selected Sport 3D Pitch Ground Visual Banner */}
+            {(() => {
+              const currentSport = sports.find((s) => s.id === Number(sportId));
+              const pMeta = getSportPitchMeta(currentSport?.name);
+              const gImg = currentSport?.image || currentSport?.imageUrl || pMeta.groundImage;
+
+              return (
+                <div
+                  style={{
+                    position: "relative",
+                    width: "100%",
+                    height: "100px",
+                    borderRadius: "10px",
+                    overflow: "hidden",
+                    marginBottom: "0.85rem",
+                    border: "1px solid #cbd5e1",
+                    background: "#09101a",
+                    boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
+                  }}
+                >
+                  <img
+                    src={gImg}
+                    alt={`${currentSport?.name || "Sport"} Pitch Ground`}
+                    referrerPolicy="no-referrer"
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      objectPosition: "center 45%",
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      background: "linear-gradient(90deg, rgba(15, 23, 42, 0.85) 0%, rgba(15, 23, 42, 0.4) 60%, transparent 100%)",
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "50%",
+                      left: "1rem",
+                      transform: "translateY(-50%)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "2px",
+                    }}
+                  >
+                    <span style={{ fontSize: "0.72rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "1px", color: pMeta.accentColor }}>
+                      BOUNCE THAT LIFTS ARENA
+                    </span>
+                    <span style={{ fontSize: "0.95rem", fontWeight: 800, color: "#ffffff" }}>
+                      {currentSport?.name} &bull; {pMeta.surfaceBadge}
+                    </span>
+                    <span style={{ fontSize: "0.72rem", color: "#cbd5e1" }}>
+                      {currentSport?.groundName || pMeta.groundName}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Venue Address & Location (Clean neutral panel) */}
             <div
@@ -427,6 +541,28 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
               />
             </div>
 
+            {/* Tournament Format Feasibility Check (Live Capacity Engine) */}
+            <div style={{ marginBottom: "1rem" }} id="modal-feasibility-section">
+              <TournamentFeasibilityCalculator
+                teams={Number(maxTeams) || 16}
+                onTeamsChange={(val) => setMaxTeams(val)}
+                venues={venues}
+                onVenuesChange={setVenues}
+                durationDays={durationDays}
+                onDurationDaysChange={setDurationDays}
+                matchDurationMinutes={matchDurationMinutes}
+                onMatchDurationMinutesChange={setMatchDurationMinutes}
+                playableHoursPerDay={playableHoursPerDay}
+                onPlayableHoursPerDayChange={setPlayableHoursPerDay}
+                format={tournamentFormat}
+                onFormatChange={setTournamentFormat}
+                numGroups={numGroups}
+                onNumGroupsChange={setNumGroups}
+                advancingPerGroup={advancingPerGroup}
+                onAdvancingPerGroupChange={setAdvancingPerGroup}
+              />
+            </div>
+
             {/* Multi-Tier Prize Breakdown (Clean neutral panel) */}
             <div
               style={{
@@ -546,6 +682,132 @@ export const AdminCreateTournamentModal: React.FC<AdminCreateTournamentModalProp
           </div>
         </form>
       </div>
+
+      {/* Confirmation Dialog if Feasibility Check Fails (Requirement 3) */}
+      {feasibilityWarningDialog && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.8)",
+            backdropFilter: "blur(4px)",
+            zIndex: 100000,
+            display: "grid",
+            placeItems: "center",
+            padding: "1rem",
+          }}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "16px",
+              maxWidth: "500px",
+              width: "100%",
+              padding: "1.5rem",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.35)",
+              border: "1px solid #fee2e2",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
+              <div
+                style={{
+                  width: "42px",
+                  height: "42px",
+                  borderRadius: "10px",
+                  background: "#fef2f2",
+                  color: "#dc2626",
+                  display: "grid",
+                  placeItems: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <AlertTriangle size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800, color: "#991b1b" }}>
+                  Schedule May Not Fit!
+                </h3>
+                <span style={{ fontSize: "0.78rem", color: "#64748b" }}>
+                  Tournament Format Feasibility Warning
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: "0.88rem", color: "#334155", lineHeight: 1.5, marginBottom: "1rem" }}>
+              The format <strong>"{tournamentFormat}"</strong> requires{" "}
+              <strong style={{ color: "#dc2626" }}>{feasibilityData.requiredMatches} matches</strong>,
+              but only <strong>{feasibilityData.capacity} matches</strong> can be played with current venue and time limits
+              ({feasibilityData.deficit} match deficit).
+            </p>
+
+            <div
+              style={{
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                borderRadius: "8px",
+                padding: "0.75rem",
+                marginBottom: "1.25rem",
+                fontSize: "0.8rem",
+                color: "#475569",
+              }}
+            >
+              <strong style={{ color: "#0f172a", display: "block", marginBottom: "0.25rem" }}>
+                Organizer Suggestions:
+              </strong>
+              <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
+                {feasibilityData.suggestions.map((s, idx) => (
+                  <li key={idx} style={{ marginBottom: "0.2rem" }}>
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div style={{ display: "flex", gap: "0.6rem", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setFeasibilityWarningDialog(false);
+                  const el = document.getElementById("modal-feasibility-section");
+                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                }}
+                style={{
+                  padding: "0.55rem 1rem",
+                  borderRadius: "8px",
+                  border: "1px solid #cbd5e1",
+                  background: "#ffffff",
+                  color: "#334155",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  cursor: "pointer",
+                }}
+              >
+                Adjust Settings
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFeasibilityWarningDialog(false);
+                  handleSubmit(undefined, true);
+                }}
+                style={{
+                  padding: "0.55rem 1.15rem",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: "#dc2626",
+                  color: "#ffffff",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  cursor: "pointer",
+                }}
+              >
+                Continue Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

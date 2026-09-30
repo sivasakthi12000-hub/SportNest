@@ -91,6 +91,16 @@ export interface Tournament {
   createdBy?: string;
   mapUrl?: string;
   rules?: string;
+  format?: string;
+  venues?: number;
+  durationDays?: number;
+  matchDurationMinutes?: number;
+  playableHoursPerDay?: number;
+  numGroups?: number;
+  advancingPerGroup?: number;
+  calculatedCapacity?: number;
+  requiredMatches?: number;
+  isFeasible?: boolean;
 }
 
 export interface Team {
@@ -161,8 +171,20 @@ export function normalizeTournament(t: any): Tournament {
     }
   }
 
+  // Extract format & feasibility fields
+  const format = t.format || extractTagValue(desc, "format") || "Single Elimination (Knockout)";
+  const venues = Number(t.venues || extractTagValue(desc, "venues") || 2);
+  const durationDays = Number(t.durationDays || t.duration_days || extractTagValue(desc, "duration_days") || 2);
+  const matchDurationMinutes = Number(t.matchDurationMinutes || t.match_duration_minutes || extractTagValue(desc, "match_duration_minutes") || 60);
+  const playableHoursPerDay = Number(t.playableHoursPerDay || t.playable_hours_per_day || extractTagValue(desc, "playable_hours_per_day") || 9);
+  const numGroups = Number(t.numGroups || t.num_groups || extractTagValue(desc, "num_groups") || 4);
+  const advancingPerGroup = Number(t.advancingPerGroup || t.advancing_per_group || extractTagValue(desc, "advancing_per_group") || 2);
+  const isFeasible = t.isFeasible !== undefined ? Boolean(t.isFeasible) : extractTagValue(desc, "is_feasible") !== "false";
+  const requiredMatches = Number(t.requiredMatches || extractTagValue(desc, "required_matches") || 0);
+  const calculatedCapacity = Number(t.calculatedCapacity || extractTagValue(desc, "calculated_capacity") || 0);
+
   // Clean description for display by removing internal brackets tags
-  const cleanDescription = desc.replace(/\[(pincode|address|prizes|created_by|map_url|rules):[^\]]+\]/gi, "").trim();
+  const cleanDescription = desc.replace(/\[(pincode|address|prizes|created_by|map_url|rules|format|venues|duration_days|match_duration_minutes|playable_hours_per_day|num_groups|advancing_per_group|is_feasible|required_matches|calculated_capacity):[^\]]+\]/gi, "").trim();
 
   return {
     id: Number(t.id),
@@ -186,6 +208,16 @@ export function normalizeTournament(t: any): Tournament {
     createdBy: createdBy || undefined,
     mapUrl: mapUrl || undefined,
     rules: rules ? rules.trim() : undefined,
+    format,
+    venues,
+    durationDays,
+    matchDurationMinutes,
+    playableHoursPerDay,
+    numGroups,
+    advancingPerGroup,
+    isFeasible,
+    requiredMatches: requiredMatches || undefined,
+    calculatedCapacity: calculatedCapacity || undefined,
   };
 }
 
@@ -204,65 +236,65 @@ export const DEFAULT_FALLBACK_SPORTS: Sport[] = [
   {
     id: 1,
     name: "Soccer",
-    image: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=1600&auto=format&fit=crop",
-    imageUrl: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=1600&auto=format&fit=crop",
-    bannerUrl: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=1600&auto=format&fit=crop",
+    image: "/grounds/soccer.jpg",
+    imageUrl: "/grounds/soccer.jpg",
+    bannerUrl: "/grounds/soccer.jpg",
     groundName: "Wembley International Pitch",
     surface: "Hybrid Natural Turf Pitch",
     format: "11 vs 11 Knockout",
     category: "Outdoor Field",
     rules: "FIFA Regulation 90 Min",
-    accentColor: "#9266cc",
-    description: "International standard football pitch featuring hybrid turf and FIFA approved floodlighting.",
+    accentColor: "#10b981",
+    description: "International standard football pitch featuring lush natural grass, goalposts, and FIFA regulation lines.",
   },
   {
     id: 2,
     name: "Basketball",
-    image: "https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1600&auto=format&fit=crop",
-    imageUrl: "https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1600&auto=format&fit=crop",
-    bannerUrl: "https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1600&auto=format&fit=crop",
+    image: "/grounds/basketball.jpg",
+    imageUrl: "/grounds/basketball.jpg",
+    bannerUrl: "/grounds/basketball.jpg",
     groundName: "Madison Square Garden Arena",
     surface: "NBA Polished Maple Hardwood Court",
     format: "5 vs 5 Full Court",
     category: "Indoor Arena",
     rules: "FIBA 4x10 Min Quarters",
-    accentColor: "#ea580c",
-    description: "Championship indoor hardwood court with digital scoreboards and spring-loaded rims.",
+    accentColor: "#f97316",
+    description: "Championship indoor hardwood court with regulation key markings, glass backboard, and spring hoop.",
   },
   {
     id: 3,
     name: "Tennis",
-    image: "https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?q=80&w=1600&auto=format&fit=crop",
-    imageUrl: "https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?q=80&w=1600&auto=format&fit=crop",
-    bannerUrl: "https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?q=80&w=1600&auto=format&fit=crop",
+    image: "/grounds/tennis.jpg",
+    imageUrl: "/grounds/tennis.jpg",
+    bannerUrl: "/grounds/tennis.jpg",
     groundName: "Arthur Ashe Stadium Court",
-    surface: "Grand Slam Hardcourt",
+    surface: "Grand Slam Clay & Hardcourt",
     format: "Singles & Doubles",
     category: "Racquet Club",
     rules: "Best of 3 / 5 Sets",
-    accentColor: "#84cc16",
-    description: "Pro acrylic hardcourt with precise ball bounce and tournament line marking.",
+    accentColor: "#eab308",
+    description: "Pro tournament terracotta court with center net, boundary lines, and regulation service boxes.",
   },
   {
     id: 4,
     name: "Cricket",
-    image: "https://images.unsplash.com/photo-1531415074868-036b107e775a?q=80&w=1600&auto=format&fit=crop",
-    imageUrl: "https://images.unsplash.com/photo-1531415074868-036b107e775a?q=80&w=1600&auto=format&fit=crop",
-    bannerUrl: "https://images.unsplash.com/photo-1531415074868-036b107e775a?q=80&w=1600&auto=format&fit=crop",
+    image: "/grounds/cricket.jpg",
+    imageUrl: "/grounds/cricket.jpg",
+    bannerUrl: "/grounds/cricket.jpg",
     groundName: "Melbourne Cricket Ground (MCG)",
     surface: "Natural Clay Pitch & Lush Outfield",
     format: "T20 & Limited Overs",
     category: "Oval Stadium",
     rules: "ICC Standard Rules",
-    accentColor: "#0284c7",
-    description: "Historic cricket arena with curated 22-yard clay wicket and boundary ropes.",
+    accentColor: "#0ea5e9",
+    description: "Historic cricket arena with curated 22-yard clay wicket, popping creases, and boundary ropes.",
   },
   {
     id: 5,
     name: "Kabaddi",
-    image: "https://images.unsplash.com/photo-1517649763962-0c623266ddc0?q=80&w=1600&auto=format&fit=crop",
-    imageUrl: "https://images.unsplash.com/photo-1517649763962-0c623266ddc0?q=80&w=1600&auto=format&fit=crop",
-    bannerUrl: "https://images.unsplash.com/photo-1517649763962-0c623266ddc0?q=80&w=1600&auto=format&fit=crop",
+    image: "/grounds/kabaddi.jpg",
+    imageUrl: "/grounds/kabaddi.jpg",
+    bannerUrl: "/grounds/kabaddi.jpg",
     groundName: "Thyagaraj Sports Complex",
     surface: "High-Grip EVA Pro Kabaddi Mat",
     format: "7 vs 7 Raid & Tackle",
@@ -274,23 +306,23 @@ export const DEFAULT_FALLBACK_SPORTS: Sport[] = [
   {
     id: 6,
     name: "Volleyball",
-    image: "https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?q=80&w=1600&auto=format&fit=crop",
-    imageUrl: "https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?q=80&w=1600&auto=format&fit=crop",
-    bannerUrl: "https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?q=80&w=1600&auto=format&fit=crop",
-    groundName: "Copacabana Beach & Olympic Arena",
+    image: "/grounds/volleyball.jpg",
+    imageUrl: "/grounds/volleyball.jpg",
+    bannerUrl: "/grounds/volleyball.jpg",
+    groundName: "Olympic Sports Center Arena",
     surface: "FIVB Elastic Taraflex Court",
     format: "6 vs 6 Rally Point",
-    category: "Indoor / Beach",
+    category: "Indoor Arena",
     rules: "Best of 5 Sets to 25",
-    accentColor: "#06b6d4",
-    description: "Shock-absorbing Taraflex flooring optimized for high-flying spikes and blocks.",
+    accentColor: "#ec4899",
+    description: "Shock-absorbing Taraflex flooring optimized for high-flying spikes, blocks, and quick rallies.",
   },
   {
     id: 7,
     name: "Hockey",
-    image: "https://images.unsplash.com/photo-1580748141549-71748dbe0bdc?q=80&w=1600&auto=format&fit=crop",
-    imageUrl: "https://images.unsplash.com/photo-1580748141549-71748dbe0bdc?q=80&w=1600&auto=format&fit=crop",
-    bannerUrl: "https://images.unsplash.com/photo-1580748141549-71748dbe0bdc?q=80&w=1600&auto=format&fit=crop",
+    image: "/grounds/hockey.jpg",
+    imageUrl: "/grounds/hockey.jpg",
+    bannerUrl: "/grounds/hockey.jpg",
     groundName: "Kalinga Stadium Hockey Pitch",
     surface: "FIH Poligras Water-based Blue Turf",
     format: "11 vs 11 Turf Match",
@@ -302,9 +334,9 @@ export const DEFAULT_FALLBACK_SPORTS: Sport[] = [
   {
     id: 8,
     name: "Badminton",
-    image: "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1600&auto=format&fit=crop",
-    imageUrl: "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1600&auto=format&fit=crop",
-    bannerUrl: "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1600&auto=format&fit=crop",
+    image: "/grounds/badminton.jpg",
+    imageUrl: "/grounds/badminton.jpg",
+    bannerUrl: "/grounds/badminton.jpg",
     groundName: "Istora Senayan Badminton Hall",
     surface: "BWF Anti-Slip Vinyl Badminton Mat",
     format: "Singles & Doubles",
@@ -666,6 +698,16 @@ export async function createTournament(tournament: Partial<Tournament>): Promise
   if (tournament.createdBy) tags.push(`[created_by:${tournament.createdBy}]`);
   if (tournament.mapUrl) tags.push(`[map_url:${tournament.mapUrl.trim()}]`);
   if (tournament.rules) tags.push(`[rules:${encodeURIComponent(tournament.rules.trim())}]`);
+  if (tournament.format) tags.push(`[format:${tournament.format}]`);
+  if (tournament.venues) tags.push(`[venues:${tournament.venues}]`);
+  if (tournament.durationDays) tags.push(`[duration_days:${tournament.durationDays}]`);
+  if (tournament.matchDurationMinutes) tags.push(`[match_duration_minutes:${tournament.matchDurationMinutes}]`);
+  if (tournament.playableHoursPerDay) tags.push(`[playable_hours_per_day:${tournament.playableHoursPerDay}]`);
+  if (tournament.numGroups) tags.push(`[num_groups:${tournament.numGroups}]`);
+  if (tournament.advancingPerGroup) tags.push(`[advancing_per_group:${tournament.advancingPerGroup}]`);
+  if (tournament.isFeasible !== undefined) tags.push(`[is_feasible:${tournament.isFeasible}]`);
+  if (tournament.requiredMatches) tags.push(`[required_matches:${tournament.requiredMatches}]`);
+  if (tournament.calculatedCapacity) tags.push(`[calculated_capacity:${tournament.calculatedCapacity}]`);
 
   const rawDesc = tournament.description?.trim() || "Tournament registered via SportsNest.";
   const packagedDescription = `${tags.join("")} ${rawDesc}`.trim();
@@ -693,6 +735,16 @@ export async function createTournament(tournament: Partial<Tournament>): Promise
     createdBy: tournament.createdBy || "admin",
     mapUrl: tournament.mapUrl,
     rules: tournament.rules,
+    format: tournament.format || "Single Elimination (Knockout)",
+    venues: tournament.venues || 1,
+    durationDays: tournament.durationDays || 1,
+    matchDurationMinutes: tournament.matchDurationMinutes || 60,
+    playableHoursPerDay: tournament.playableHoursPerDay || 9,
+    numGroups: tournament.numGroups || 4,
+    advancingPerGroup: tournament.advancingPerGroup || 2,
+    isFeasible: tournament.isFeasible !== undefined ? tournament.isFeasible : true,
+    requiredMatches: tournament.requiredMatches,
+    calculatedCapacity: tournament.calculatedCapacity,
   };
 
   const client = getSupabase();
@@ -1009,6 +1061,16 @@ export async function updateTournament(id: number, updates: Partial<Tournament>)
         }
         if (updates.mapUrl) tags.push(`[map_url:${updates.mapUrl.trim()}]`);
         if (updates.rules) tags.push(`[rules:${encodeURIComponent(updates.rules.trim())}]`);
+        if (updates.format) tags.push(`[format:${updates.format}]`);
+        if (updates.venues) tags.push(`[venues:${updates.venues}]`);
+        if (updates.durationDays) tags.push(`[duration_days:${updates.durationDays}]`);
+        if (updates.matchDurationMinutes) tags.push(`[match_duration_minutes:${updates.matchDurationMinutes}]`);
+        if (updates.playableHoursPerDay) tags.push(`[playable_hours_per_day:${updates.playableHoursPerDay}]`);
+        if (updates.numGroups) tags.push(`[num_groups:${updates.numGroups}]`);
+        if (updates.advancingPerGroup) tags.push(`[advancing_per_group:${updates.advancingPerGroup}]`);
+        if (updates.isFeasible !== undefined) tags.push(`[is_feasible:${updates.isFeasible}]`);
+        if (updates.requiredMatches) tags.push(`[required_matches:${updates.requiredMatches}]`);
+        if (updates.calculatedCapacity) tags.push(`[calculated_capacity:${updates.calculatedCapacity}]`);
 
         const rawDesc = updates.description?.trim() || "Tournament registered via SportsNest.";
         payload.description = `${tags.join("")} ${rawDesc}`.trim();

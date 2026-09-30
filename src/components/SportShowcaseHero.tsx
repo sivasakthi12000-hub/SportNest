@@ -25,9 +25,8 @@ interface SportShowcaseHeroProps {
   showAllGroundsGrid?: boolean;
 }
 
-// All-sports panoramic arena backdrop image
-const ALL_SPORTS_HERO_IMAGE =
-  "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?q=80&w=1920&auto=format&fit=crop";
+// All-sports panoramic arena backdrop image (reliable local asset with high-contrast stadium ground)
+const ALL_SPORTS_HERO_IMAGE = "/hero-arena.jpg";
 
 export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
   sports,
@@ -129,8 +128,7 @@ export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
             className="hero-backdrop-img animating"
             referrerPolicy="no-referrer"
             onError={(e) => {
-              (e.target as HTMLImageElement).src =
-                "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?q=80&w=1800&auto=format&fit=crop";
+              (e.target as HTMLImageElement).src = "/grounds/soccer.jpg";
             }}
           />
           {/* Gradient Vignettes to ensure high-contrast readability */}
@@ -240,79 +238,82 @@ export const SportShowcaseHero: React.FC<SportShowcaseHeroProps> = ({
           </div>
         </div>
 
-        {/* The Horizontal Carousel Track */}
-        <div className="carousel-scroll-track" ref={carouselRef}>
+        {/* The Horizontal Carousel Track with 3D Pitch Ground Diorama Cards */}
+        <div className="carousel-scroll-track" ref={carouselRef} style={{ padding: "0.75rem 0.25rem 1.5rem" }}>
           {displaySports.map((sport) => {
-            const sCustomImg = sport.image || sport.imageUrl || sport.bannerUrl;
-            const sMeta = getSportCinematicMeta(sport.name, sCustomImg);
             const sStats = tournamentStats[sport.id] || { count: 0, prize: 0, teams: 0 };
-
             return (
-              <div
+              <SportPitchCard
                 key={sport.id}
-                className="sport-poster-card"
+                sport={sport}
+                stats={sStats}
+                variant="carousel"
                 onClick={() => handleSportCardClick(sport)}
-                tabIndex={0}
-                role="button"
-                title={`Click to view ${sport.name} tournaments`}
-                aria-label={`View ${sport.name} tournaments`}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    handleSportCardClick(sport);
-                  }
-                }}
-              >
-                {/* Poster Image */}
-                <img
-                  src={sMeta.posterImage}
-                  alt={`${sport.name} Poster`}
-                  className="poster-bg-img"
-                  referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src =
-                      "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?q=80&w=800&auto=format&fit=crop";
-                  }}
-                />
-
-                {/* Gradient shade for bottom text readability */}
-                <div className="poster-gradient-shade" />
-
-                {/* Top Badge */}
-                <div className="poster-top-tag-wrap">
-                  <span className="poster-network-tag">
-                    {sport.surface ? sport.surface.split(" ")[0] : sMeta.surface.split(" ")[0]}
-                  </span>
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "4px",
-                      fontSize: "0.7rem",
-                      color: "#10b981",
-                      background: "rgba(0, 0, 0, 0.6)",
-                      padding: "2px 6px",
-                      borderRadius: "6px",
-                    }}
-                  >
-                    View ➜
-                  </span>
-                </div>
-
-                {/* Bottom Title & Meta */}
-                <div className="poster-bottom-info">
-                  <h3 className="poster-sport-name">{sport.name}</h3>
-                  <div className="poster-sub-meta">
-                    <span>{sMeta.players}</span>
-                    <span className="poster-tournament-count">
-                      {sStats.count > 0 ? `${sStats.count} Events` : "Open League"}
-                    </span>
-                  </div>
-                </div>
-              </div>
+                actionLabel="Explore"
+              />
             );
           })}
         </div>
       </section>
+
+      {/* =====================================================================
+          CHAMPIONSHIP ARENA GROUNDS & PITCHES GRID (Design reference match)
+          ===================================================================== */}
+      {showAllGroundsGrid && (
+        <section className="sports-grounds-gallery-section" aria-label="Official Tournament Pitch & Ground Specifications">
+          <div className="carousel-header-row" style={{ marginBottom: "1.25rem" }}>
+            <div className="carousel-title-group">
+              <div>
+                <h2 className="carousel-section-title" style={{ fontSize: "1.5rem" }}>
+                  Championship Grounds & Pitches
+                </h2>
+                <span className="carousel-section-subtitle">
+                  Authentic 3D regulation grounds, surfaces, equipment & live tournament leagues
+                </span>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span
+                style={{
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  color: "#10b981",
+                  background: "rgba(16, 185, 129, 0.12)",
+                  padding: "0.35rem 0.85rem",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(16, 185, 129, 0.3)",
+                }}
+              >
+                ● {displaySports.length} Arenas Online
+              </span>
+            </div>
+          </div>
+
+          {/* Responsive Multi-column Grid of 3D Pitch Ground Cards */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: "1.5rem",
+              width: "100%",
+            }}
+          >
+            {displaySports.map((sport) => {
+              const sStats = tournamentStats[sport.id] || { count: 0, prize: 0, teams: 0 };
+              return (
+                <SportPitchCard
+                  key={sport.id}
+                  sport={sport}
+                  stats={sStats}
+                  variant="poster"
+                  onClick={() => handleSportCardClick(sport)}
+                  actionLabel="View Tournaments"
+                />
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 };

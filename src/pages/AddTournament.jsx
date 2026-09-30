@@ -13,6 +13,7 @@ import {
   Check,
   X,
   AlertCircle,
+  AlertTriangle,
   Eye,
   EyeOff,
   Navigation,
@@ -27,6 +28,8 @@ import {
 } from "../utils/locationService";
 import { useAuth } from "../context/AuthContext";
 import { WysiwygEditor } from "../components/WysiwygEditor";
+import { TournamentFeasibilityCalculator } from "../components/TournamentFeasibilityCalculator";
+import { analyzeScheduleFeasibility } from "../services/scheduleFeasibilityService";
 import "../styles/forms.css";
 
 /**
@@ -204,6 +207,38 @@ const AddTournament = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // Tournament Format & Feasibility Check state
+  const [venues, setVenues] = useState(1);
+  const [durationDays, setDurationDays] = useState(1);
+  const [matchDurationMinutes, setMatchDurationMinutes] = useState(60);
+  const [playableHoursPerDay, setPlayableHoursPerDay] = useState(9);
+  const [tournamentFormat, setTournamentFormat] = useState("Single Elimination (Knockout)");
+  const [numGroups, setNumGroups] = useState(4);
+  const [advancingPerGroup, setAdvancingPerGroup] = useState(2);
+  const [feasibilityWarningDialog, setFeasibilityWarningDialog] = useState(false);
+
+  const feasibilityData = useMemo(() => {
+    return analyzeScheduleFeasibility({
+      teams: Math.max(2, Number(formData.maxTeams) || 16),
+      venues: Math.max(1, Number(venues) || 1),
+      durationDays: Math.max(1, Number(durationDays) || 1),
+      matchDurationMinutes: Math.max(15, Number(matchDurationMinutes) || 60),
+      playableHoursPerDay: Math.max(1, Math.min(24, Number(playableHoursPerDay) || 9)),
+      format: tournamentFormat,
+      numGroups: Math.max(2, Number(numGroups) || 4),
+      advancingPerGroup: Math.max(1, Number(advancingPerGroup) || 2),
+    });
+  }, [
+    formData.maxTeams,
+    venues,
+    durationDays,
+    matchDurationMinutes,
+    playableHoursPerDay,
+    tournamentFormat,
+    numGroups,
+    advancingPerGroup,
+  ]);
+
   // 1. Fetch Sports and Indian Locations from Supabase
   useEffect(() => {
     let isMounted = true;
@@ -370,10 +405,17 @@ const AddTournament = () => {
   // =========================================================================
   // SUBMISSION HANDLER WITH RIGID VALIDATION & SUPABASE PERSISTENCE
   // =========================================================================
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+  const handleSubmit = async (e, bypassFeasibility = false) => {
+    if (e && e.preventDefault) e.preventDefault();
     setError("");
+
+    // Requirement 3: Feasibility confirmation dialog
+    if (!feasibilityData.isFeasible && !bypassFeasibility) {
+      setFeasibilityWarningDialog(true);
+      return;
+    }
+
+    setLoading(true);
 
     // 1. Validate required fields
     if (!formData.name.trim()) {
@@ -492,6 +534,16 @@ const AddTournament = () => {
       description: formData.description?.trim() || "Sanctioned sports tournament on SportsNest.",
       rules: formData.rules?.trim() || undefined,
       createdBy: finalUsername,
+      format: tournamentFormat,
+      venues: Number(venues),
+      durationDays: Number(durationDays),
+      matchDurationMinutes: Number(matchDurationMinutes),
+      playableHoursPerDay: Number(playableHoursPerDay),
+      numGroups: tournamentFormat === "Group Stage + Knockout" ? Number(numGroups) : undefined,
+      advancingPerGroup: tournamentFormat === "Group Stage + Knockout" ? Number(advancingPerGroup) : undefined,
+      isFeasible: feasibilityData.isFeasible,
+      requiredMatches: feasibilityData.requiredMatches,
+      calculatedCapacity: feasibilityData.capacity,
     };
 
     const res = await createTournament(payload);
@@ -1145,6 +1197,156 @@ const AddTournament = () => {
             />
           </div>
         </div>
+
+        {/* =====================================================================
+            SECTION 3B: TOURNAMENT FORMAT FEASIBILITY CHECK (Live scheduling check)
+            ===================================================================== */}
+        <div style={{ marginBottom: "1.5rem" }} id="feasibility-section">
+          <TournamentFeasibilityCalculator
+            teams={Number(formData.maxTeams) || 16}
+            onTeamsChange={(val) => setFormData((prev) => ({ ...prev, maxTeams: String(val) }))}
+            venues={venues}
+            onVenuesChange={setVenues}
+            durationDays={durationDays}
+            onDurationDaysChange={setDurationDays}
+            matchDurationMinutes={matchDurationMinutes}
+            onMatchDurationMinutesChange={setMatchDurationMinutes}
+            playableHoursPerDay={playableHoursPerDay}
+            onPlayableHoursPerDayChange={setPlayableHoursPerDay}
+            format={tournamentFormat}
+            onFormatChange={setTournamentFormat}
+            numGroups={numGroups}
+            onNumGroupsChange={setNumGroups}
+            advancingPerGroup={advancingPerGroup}
+            onAdvancingPerGroupChange={setAdvancingPerGroup}
+          />
+        </div>
+
+        {/* Confirmation Dialog if Feasibility Check Fails (Requirement 3) */}
+        {feasibilityWarningDialog && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(15, 23, 42, 0.75)",
+              backdropFilter: "blur(4px)",
+              zIndex: 99999,
+              display: "grid",
+              placeItems: "center",
+              padding: "1.5rem",
+            }}
+          >
+            <div
+              style={{
+                background: "#ffffff",
+                borderRadius: "16px",
+                maxWidth: "520px",
+                width: "100%",
+                padding: "1.75rem",
+                boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.35)",
+                border: "1px solid #fee2e2",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
+                <div
+                  style={{
+                    width: "44px",
+                    height: "44px",
+                    borderRadius: "12px",
+                    background: "#fef2f2",
+                    color: "#dc2626",
+                    display: "grid",
+                    placeItems: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <AlertTriangle size={24} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800, color: "#991b1b" }}>
+                    Schedule May Not Fit!
+                  </h3>
+                  <span style={{ fontSize: "0.82rem", color: "#64748b" }}>
+                    Tournament Format Feasibility Warning
+                  </span>
+                </div>
+              </div>
+
+              <p style={{ fontSize: "0.92rem", color: "#334155", lineHeight: 1.5, marginBottom: "1.25rem" }}>
+                The selected format <strong>"{tournamentFormat}"</strong> requires{" "}
+                <strong style={{ color: "#dc2626" }}>{feasibilityData.requiredMatches} matches</strong>,
+                but your available venue capacity and tournament duration only allow{" "}
+                <strong>{feasibilityData.capacity} matches</strong> ({feasibilityData.deficit} match deficit).
+              </p>
+
+              <div
+                style={{
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "10px",
+                  padding: "0.85rem 1rem",
+                  marginBottom: "1.5rem",
+                  fontSize: "0.82rem",
+                  color: "#475569",
+                }}
+              >
+                <strong style={{ color: "#0f172a", display: "block", marginBottom: "0.35rem" }}>
+                  Organizer Recommendations:
+                </strong>
+                <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
+                  {feasibilityData.suggestions.map((s, idx) => (
+                    <li key={idx} style={{ marginBottom: "0.25rem" }}>
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFeasibilityWarningDialog(false);
+                    const el = document.getElementById("feasibility-section");
+                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  style={{
+                    padding: "0.65rem 1.15rem",
+                    borderRadius: "8px",
+                    border: "1px solid #cbd5e1",
+                    background: "#ffffff",
+                    color: "#334155",
+                    fontWeight: 700,
+                    fontSize: "0.88rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  Adjust Schedule Settings
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFeasibilityWarningDialog(false);
+                    handleSubmit(null, true);
+                  }}
+                  style={{
+                    padding: "0.65rem 1.25rem",
+                    borderRadius: "8px",
+                    border: "none",
+                    background: "#dc2626",
+                    color: "#ffffff",
+                    fontWeight: 700,
+                    fontSize: "0.88rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  Continue Anyway & Commit
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* =====================================================================
             SECTION 4: PRIZE DISTRIBUTION (1st to 8th & Special Awards)

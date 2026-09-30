@@ -38,8 +38,29 @@ export const SportPitchCard: React.FC<SportPitchCardProps> = ({
 }) => {
   const meta = getSportPitchMeta(sport.name);
   const icon = SPORT_ICONS_MAP[sport.name.toLowerCase()] || "🏆";
-  const customImg = sport.image || sport.imageUrl || sport.bannerUrl;
-  const groundImage = customImg || meta.groundImage;
+  const sName = (sport.name || "").toLowerCase();
+  const fallbackGround =
+    sName.includes("soccer") || sName.includes("football")
+      ? "/grounds/soccer.jpg"
+      : sName.includes("basket")
+      ? "/grounds/basketball.jpg"
+      : sName.includes("tennis")
+      ? "/grounds/tennis.jpg"
+      : sName.includes("cricket")
+      ? "/grounds/cricket.jpg"
+      : sName.includes("badminton")
+      ? "/grounds/badminton.jpg"
+      : sName.includes("kabaddi")
+      ? "/grounds/kabaddi.jpg"
+      : sName.includes("hockey")
+      ? "/grounds/hockey.jpg"
+      : "/grounds/volleyball.jpg";
+
+  let rawImg = sport.image || sport.imageUrl || sport.bannerUrl;
+  if (rawImg && rawImg.includes("/src/assets/")) {
+    rawImg = fallbackGround;
+  }
+  const groundImage = rawImg || meta.groundImage || fallbackGround;
 
   // Format currency
   const formatMoney = (val: number) => {
@@ -123,6 +144,19 @@ export const SportPitchCard: React.FC<SportPitchCardProps> = ({
             src={groundImage}
             alt={`${sport.name} Pitch Ground`}
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              const sName = (sport.name || "").toLowerCase();
+              const key = sName.includes("soccer") || sName.includes("football")
+                ? "soccer"
+                : sName.includes("basket")
+                ? "basketball"
+                : sName.includes("tennis")
+                ? "tennis"
+                : sName.includes("cricket")
+                ? "cricket"
+                : "volleyball";
+              e.currentTarget.src = `/grounds/${key}.jpg`;
+            }}
             style={{
               width: "100%",
               height: "100%",
@@ -227,6 +261,19 @@ export const SportPitchCard: React.FC<SportPitchCardProps> = ({
           alt={`${sport.name} Pitch Ground`}
           className="pitch-3d-ground-img"
           referrerPolicy="no-referrer"
+          onError={(e) => {
+            const sName = (sport.name || "").toLowerCase();
+            const key = sName.includes("soccer") || sName.includes("football")
+              ? "soccer"
+              : sName.includes("basket")
+              ? "basketball"
+              : sName.includes("tennis")
+              ? "tennis"
+              : sName.includes("cricket")
+              ? "cricket"
+              : "volleyball";
+            e.currentTarget.src = `/grounds/${key}.jpg`;
+          }}
           style={{
             width: "100%",
             height: "100%",
