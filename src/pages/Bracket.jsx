@@ -16,10 +16,7 @@ import {
   Shuffle,
 } from "lucide-react";
 import { getTournamentById, getTeamsByTournamentId } from "../services/dataService";
-import {
-  TournamentFormatType,
-  generateTournamentSchedule,
-} from "../services/scheduleFeasibilityService";
+import { generateTournamentSchedule } from "../services/scheduleFeasibilityService";
 import "../styles/tournament.css";
 
 const Bracket = () => {

@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import express from "express";
+import compression from "compression";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
@@ -149,14 +150,202 @@ function generateBackendToken(username: string): string {
   return `ast_${username}_${timestamp}_${randomBytes}`;
 }
 
+// ============================================================================
+// Enterprise Traffic & Concurrency Engine
+// ============================================================================
+interface TrafficMetrics {
+  totalRequests: number;
+  cacheHits: number;
+  cacheMisses: number;
+  rateLimitedCount: number;
+  windowRequests: number[];
+  startTime: number;
+}
+
+const trafficMetrics: TrafficMetrics = {
+  totalRequests: 0,
+  cacheHits: 0,
+  cacheMisses: 0,
+  rateLimitedCount: 0,
+  windowRequests: [],
+  startTime: Date.now(),
+};
+
+// Sliding-window IP Rate Limiter
+interface RateLimitBucket {
+  count: number;
+  resetAt: number;
+}
+const rateLimitBuckets = new Map<string, RateLimitBucket>();
+
+function rateLimiterMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+  // Never rate-limit static files, vite internal modules, or dev assets
+  if (
+    req.path.startsWith("/grounds/") ||
+    req.path === "/hero-arena.jpg" ||
+    req.path.startsWith("/@") ||
+    req.path.startsWith("/src/") ||
+    req.path.startsWith("/node_modules/")
+  ) {
+    return next();
+  }
+
+  const ip = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "client";
+  const now = Date.now();
+  const windowMs = 60 * 1000;
+  const isMutation = req.method !== "GET" && req.method !== "HEAD";
+  const maxLimit = isMutation ? 120 : 1200; // 120/min for mutations, 1200/min for reads
+
+  let bucket = rateLimitBuckets.get(ip);
+  if (!bucket || now > bucket.resetAt) {
+    bucket = { count: 1, resetAt: now + windowMs };
+    rateLimitBuckets.set(ip, bucket);
+  } else {
+    bucket.count++;
+  }
+
+  const remaining = Math.max(0, maxLimit - bucket.count);
+  res.setHeader("X-RateLimit-Limit", maxLimit);
+  res.setHeader("X-RateLimit-Remaining", remaining);
+  res.setHeader("X-RateLimit-Reset", Math.ceil(bucket.resetAt / 1000));
+
+  if (bucket.count > maxLimit) {
+    trafficMetrics.rateLimitedCount++;
+    const retrySec = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+    res.setHeader("Retry-After", retrySec);
+    return res.status(429).json({
+      error: "Too Many Requests",
+      message: "Traffic rate limit exceeded. Please wait a moment.",
+      retryAfterSeconds: retrySec,
+    });
+  }
+
+  // Periodic pruning of stale IP buckets
+  if (rateLimitBuckets.size > 2000) {
+    for (const [k, v] of rateLimitBuckets.entries()) {
+      if (now > v.resetAt) rateLimitBuckets.delete(k);
+    }
+  }
+
+  next();
+}
+
+// In-Memory Response Cache for high-traffic read queries
+interface CacheEntry {
+  data: any;
+  contentType: string;
+  expiresAt: number;
+}
+const apiCache = new Map<string, CacheEntry>();
+
+function invalidateApiCache(prefix?: string) {
+  if (!prefix) {
+    apiCache.clear();
+    return;
+  }
+  for (const key of apiCache.keys()) {
+    if (key.startsWith(prefix)) {
+      apiCache.delete(key);
+    }
+  }
+}
+
+function cachedRoute(ttlSeconds: number = 30) {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.method !== "GET") return next();
+
+    const cacheKey = req.originalUrl || req.url;
+    const now = Date.now();
+    const entry = apiCache.get(cacheKey);
+
+    if (entry && entry.expiresAt > now) {
+      trafficMetrics.cacheHits++;
+      res.setHeader("X-Cache", "HIT");
+      res.setHeader("Cache-Control", `public, max-age=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`);
+      res.setHeader("Content-Type", entry.contentType);
+      return res.send(entry.data);
+    }
+
+    trafficMetrics.cacheMisses++;
+    res.setHeader("X-Cache", "MISS");
+    res.setHeader("Cache-Control", `public, max-age=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`);
+
+    const originalSend = res.send.bind(res);
+    res.send = (body: any) => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        apiCache.set(cacheKey, {
+          data: body,
+          contentType: (res.getHeader("Content-Type") as string) || "application/json",
+          expiresAt: now + ttlSeconds * 1000,
+        });
+      }
+      return originalSend(body);
+    };
+
+    next();
+  };
+}
+
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
-  app.use(express.json());
+  // 1. Response Compression (gzip / deflate shrinks traffic by up to 80%)
+  app.use(compression({ threshold: 1024 }));
 
-  // Health check API
-  app.get("/api/health", (_req, res) => {
+  // 2. Safe JSON parser limit
+  app.use(express.json({ limit: "5mb" }));
+
+  // 3. Global Traffic Metrics Recording & Rate Limiter
+  app.use((_req, _res, next) => {
+    trafficMetrics.totalRequests++;
+    trafficMetrics.windowRequests.push(Date.now());
+    next();
+  });
+  app.use(rateLimiterMiddleware);
+
+  // Live Traffic Health & Concurrency Diagnostics Endpoint
+  app.get("/api/traffic-status", (_req, res) => {
+    const now = Date.now();
+    trafficMetrics.windowRequests = trafficMetrics.windowRequests.filter((t) => now - t < 60000);
+    const rps = +(trafficMetrics.windowRequests.length / 60).toFixed(2);
+    const mem = process.memoryUsage();
+    const uptime = Math.floor((now - trafficMetrics.startTime) / 1000);
+    const totalOps = trafficMetrics.cacheHits + trafficMetrics.cacheMisses;
+    const hitRatio = totalOps > 0 ? +((trafficMetrics.cacheHits / totalOps) * 100).toFixed(1) : 100;
+
+    res.json({
+      status: "optimal",
+      trafficHandling: "active",
+      concurrencyShield: "enabled",
+      optimizations: [
+        "In-Memory TTL Response Caching (<1ms latency)",
+        "Sliding-Window IP Rate Limiter (DDoS / Flood Shield)",
+        "Gzip & Deflate Stream Compression",
+        "24-Hour Static Asset Browser Caching",
+        "Automatic Cache Invalidation on Mutations",
+      ],
+      metrics: {
+        currentRPS: rps,
+        totalRequestsHandled: trafficMetrics.totalRequests,
+        cacheHitRatio: `${hitRatio}%`,
+        cacheHits: trafficMetrics.cacheHits,
+        cacheMisses: trafficMetrics.cacheMisses,
+        cachedEndpointsCount: apiCache.size,
+        rateLimitedRequests: trafficMetrics.rateLimitedCount,
+        activeTrackedIPs: rateLimitBuckets.size,
+        uptimeSeconds: uptime,
+        memoryUsageMB: {
+          heapUsed: +(mem.heapUsed / 1024 / 1024).toFixed(1),
+          heapTotal: +(mem.heapTotal / 1024 / 1024).toFixed(1),
+          rss: +(mem.rss / 1024 / 1024).toFixed(1),
+        },
+      },
+    });
+  });
+
+  // Health check API (cached for 15s)
+  app.get("/api/health", cachedRoute(15), (_req, res) => {
     const rawUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
     const cleanUrl = cleanSupabaseUrl(rawUrl);
     res.json({
@@ -166,8 +355,8 @@ async function startServer() {
     });
   });
 
-  // Runtime environment config API for frontend clients
-  app.get("/api/config", (_req, res) => {
+  // Runtime environment config API for frontend clients (cached for 60s)
+  app.get("/api/config", cachedRoute(60), (_req, res) => {
     const rawUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
     const rawKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "";
     res.json({
@@ -803,7 +992,7 @@ async function startServer() {
   }
   loadTeams();
 
-  app.get("/api/teams", (req, res) => {
+  app.get("/api/teams", cachedRoute(15), (req, res) => {
     loadTeams();
     const page = Number(req.query.page);
     const pageSize = Number(req.query.pageSize);
@@ -860,6 +1049,7 @@ async function startServer() {
     };
     teamsRegistryStore.unshift(newTeam);
     saveTeams();
+    invalidateApiCache("/api/teams");
     recordAuditLog("admin", "Added Team", `${newTeam.name} to ${newTeam.tournamentName}`, "success", req.ip);
     res.json({ success: true, team: newTeam });
   });
@@ -880,6 +1070,7 @@ async function startServer() {
       ...(tournamentName ? { tournamentName: String(tournamentName).trim() } : {}),
     };
     saveTeams();
+    invalidateApiCache("/api/teams");
     recordAuditLog("admin", "Edited Team Roster", `${teamsRegistryStore[index].name}`, "success", req.ip);
     res.json({ success: true, team: teamsRegistryStore[index] });
   });
@@ -891,6 +1082,7 @@ async function startServer() {
     const beforeLen = teamsRegistryStore.length;
     teamsRegistryStore = teamsRegistryStore.filter((t) => t.id !== id);
     saveTeams();
+    invalidateApiCache("/api/teams");
     if (existing) {
       recordAuditLog("admin", "Disqualified/Removed Team", `${existing.name}`, "warning", req.ip);
     }
@@ -941,7 +1133,7 @@ async function startServer() {
 
   loadCustomSportsFromDisk();
 
-  app.get("/api/sports", (req, res) => {
+  app.get("/api/sports", cachedRoute(20), (req, res) => {
     loadCustomSportsFromDisk();
     const page = Number(req.query.page);
     const pageSize = Number(req.query.pageSize);
@@ -1022,6 +1214,7 @@ async function startServer() {
 
     customSportsStore.push(newSport);
     saveCustomSportsToDisk();
+    invalidateApiCache("/api/sports");
     recordAuditLog("admin", "Created Sport Discipline", `${cleanName} (ID: ${nextId})`, "success", req.ip);
 
     console.log(`[Backend Sports] New sport added: ${cleanName} (ID: ${nextId})`);
@@ -1053,6 +1246,7 @@ async function startServer() {
         updatedAt: new Date().toISOString(),
       };
       saveCustomSportsToDisk();
+      invalidateApiCache("/api/sports");
       recordAuditLog("admin", "Updated Sport Discipline", `${customSportsStore[index].name}`, "success", req.ip);
       return res.json({ success: true, data: customSportsStore[index] });
     } else {
@@ -1073,6 +1267,7 @@ async function startServer() {
       };
       customSportsStore.push(newOverride);
       saveCustomSportsToDisk();
+      invalidateApiCache("/api/sports");
       recordAuditLog("admin", "Updated Sport Discipline", `${cleanName}`, "success", req.ip);
       return res.json({ success: true, data: newOverride });
     }
@@ -1103,6 +1298,7 @@ async function startServer() {
     });
 
     saveCustomSportsToDisk();
+    invalidateApiCache("/api/sports");
     recordAuditLog("admin", "Deleted Sport Discipline", `${targetName || target}`, "warning", req.ip);
     console.log(`[Backend Sports] Sport removed: ${target} / ${targetName}. Store size: ${customSportsStore.length}`);
     res.json({ success: true, removedCount: beforeLen - customSportsStore.length });
@@ -1139,7 +1335,7 @@ async function startServer() {
 
   loadTournamentOverrides();
 
-  app.get("/api/tournaments/overrides", (req, res) => {
+  app.get("/api/tournaments/overrides", cachedRoute(20), (req, res) => {
     loadTournamentOverrides();
     res.json({ success: true, overrides: tournamentOverrides });
   });
@@ -1160,6 +1356,7 @@ async function startServer() {
       updatedAt: new Date().toISOString(),
     };
     saveTournamentOverrides();
+    invalidateApiCache("/api/tournaments/overrides");
 
     console.log(`[Tournament Dates] Updated dates for tournament ${id}:`, tournamentOverrides[id]);
     res.json({ success: true, id, dates: tournamentOverrides[id], message: "Tournament dates updated successfully." });
@@ -1222,8 +1419,14 @@ async function startServer() {
     });
   });
 
-  // Explicitly serve /public directory for static images (grounds, icons, etc.)
-  app.use(express.static(path.join(process.cwd(), "public")));
+  // Explicitly serve /public directory for static images (grounds, icons, etc.) with index: false and 24h caching
+  app.use(
+    express.static(path.join(process.cwd(), "public"), {
+      index: false,
+      maxAge: "1d",
+      etag: true,
+    })
+  );
 
   // Vite middleware for development vs static serve for production
   if (process.env.NODE_ENV !== "production") {

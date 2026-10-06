@@ -49,28 +49,30 @@ function SessionRouteRestorer() {
 
 export default function App() {
   return (
-    <Router>
-      <AuthProvider>
-        <ErrorBoundary>
-          <SessionRouteRestorer />
-          <Navbar />
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/sports" element={<Sports />} />
-            <Route path="/tournaments" element={<Tournaments />} />
-            <Route path="/tournament/:id" element={<TournamentDetails />} />
-            <Route path="/tournament/:id/teams" element={<TeamList />} />
-            <Route path="/team/:id" element={<TeamProfile />} />
-            <Route path="/register/:tournamentId" element={<RegisterTeam />} />
-            <Route path="/bracket/:tournamentId" element={<Bracket />} />
-            <Route path="/add-tournament" element={<AddTournament />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/admin" element={<Dashboard />} />
-            <Route path="/profile" element={<Profile />} />
-          </Routes>
-        </ErrorBoundary>
-      </AuthProvider>
-    </Router>
+    <ErrorBoundary fallbackTitle="Application Error">
+      <Router>
+        <AuthProvider>
+          <ErrorBoundary>
+            <SessionRouteRestorer />
+            <Navbar />
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/sports" element={<Sports />} />
+              <Route path="/tournaments" element={<Tournaments />} />
+              <Route path="/tournament/:id" element={<TournamentDetails />} />
+              <Route path="/tournament/:id/teams" element={<TeamList />} />
+              <Route path="/team/:id" element={<TeamProfile />} />
+              <Route path="/register/:tournamentId" element={<RegisterTeam />} />
+              <Route path="/bracket/:tournamentId" element={<Bracket />} />
+              <Route path="/add-tournament" element={<AddTournament />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/admin" element={<Dashboard />} />
+              <Route path="/profile" element={<Profile />} />
+            </Routes>
+          </ErrorBoundary>
+        </AuthProvider>
+      </Router>
+    </ErrorBoundary>
   );
 }

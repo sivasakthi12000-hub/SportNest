@@ -9,6 +9,20 @@
  * - Double Elimination
  */
 
+export const TOURNAMENT_FORMATS = [
+  "Single Elimination (Knockout)",
+  "Round Robin",
+  "Group Stage + Knockout",
+  "Double Elimination",
+] as const;
+
+export const TournamentFormatType = {
+  SINGLE_ELIMINATION: "Single Elimination (Knockout)" as const,
+  ROUND_ROBIN: "Round Robin" as const,
+  GROUP_STAGE_KNOCKOUT: "Group Stage + Knockout" as const,
+  DOUBLE_ELIMINATION: "Double Elimination" as const,
+};
+
 export type TournamentFormatType =
   | "Single Elimination (Knockout)"
   | "Round Robin"

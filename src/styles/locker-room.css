@@ -1,0 +1,691 @@
+/* ==========================================================================
+   Interactive 3D Locker Room Styles
+   Cinematic broadcast aesthetic matching official sports locker room presentations
+   ========================================================================== */
+
+.locker-room-viewport {
+  position: relative;
+  width: 100%;
+  background: radial-gradient(circle at 50% 20%, #1a2232 0%, #0d121c 65%, #07090e 100%);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  user-select: none;
+}
+
+/* Atmospheric overhead stadium spotlight */
+.locker-spotlight {
+  position: absolute;
+  top: -80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 700px;
+  height: 380px;
+  background: radial-gradient(ellipse at center, rgba(56, 189, 248, 0.15) 0%, rgba(16, 185, 129, 0.08) 40%, transparent 75%);
+  pointer-events: none;
+  filter: blur(40px);
+  z-index: 1;
+}
+
+/* Top Broadcast Navigation & Header */
+.locker-topbar {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(13, 18, 28, 0.7);
+  backdrop-filter: blur(12px);
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.locker-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.locker-team-crest {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(16, 185, 129, 0.2));
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.locker-team-meta h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.locker-team-meta p {
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Category Filter Tabs */
+.locker-filter-pills {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(15, 23, 42, 0.75);
+  padding: 0.3rem 0.4rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.locker-filter-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.locker-filter-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.locker-filter-btn.active {
+  background: rgba(239, 68, 68, 0.9);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
+}
+
+/* Kit variant and audio controls */
+.locker-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.locker-tool-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.2s ease;
+}
+
+.locker-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+.locker-tool-btn.active {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+
+/* ==========================================================================
+   Main 3D Locker Room Arena
+   ========================================================================== */
+.locker-arena-grid {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  min-height: 580px;
+  position: relative;
+  z-index: 5;
+}
+
+@media (max-width: 1024px) {
+  .locker-arena-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Left / Main Stage: 3D Rack & Rail */
+.locker-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1.5rem 1.5rem 2rem;
+  overflow: hidden;
+}
+
+/* Chrome rail and hanger system */
+.locker-rail-housing {
+  position: relative;
+  width: 100%;
+  margin-top: 1rem;
+  padding-top: 2rem;
+}
+
+/* The solid chrome rail bar running horizontally */
+.locker-metal-rail {
+  position: absolute;
+  top: 18px;
+  left: -20px;
+  right: -20px;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #94a3b8 0%, #cbd5e1 35%, #475569 70%, #1e293b 100%);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6), inset 0 2px 2px rgba(255, 255, 255, 0.8);
+  z-index: 2;
+}
+
+.locker-rail-caps-left,
+.locker-rail-caps-right {
+  position: absolute;
+  top: 14px;
+  width: 16px;
+  height: 20px;
+  background: #334155;
+  border: 1px solid #64748b;
+  border-radius: 4px;
+  z-index: 3;
+}
+
+.locker-rail-caps-left { left: -24px; }
+.locker-rail-caps-right { right: -24px; }
+
+/* 3D Hanger carousel viewport */
+.locker-carousel-container {
+  position: relative;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1.5rem 1rem 2.5rem;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(239, 68, 68, 0.4) transparent;
+  perspective: 1200px;
+  perspective-origin: 50% 30%;
+}
+
+.locker-carousel-container::-webkit-scrollbar {
+  height: 6px;
+}
+.locker-carousel-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+}
+
+.locker-jerseys-track {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.75rem;
+  transform-style: preserve-3d;
+  padding: 0.5rem 3rem 1.5rem;
+  min-width: max-content;
+}
+
+/* Single Jersey + Hanger Assembly */
+.locker-jersey-unit {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), filter 0.3s ease;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+/* Chrome Hanger Hook */
+.jersey-hanger-hook {
+  width: 18px;
+  height: 24px;
+  border: 3px solid #cbd5e1;
+  border-bottom: none;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  margin-bottom: -4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  transition: transform 0.3s ease;
+  z-index: 3;
+}
+
+/* Wooden / Acrylic Triangular Hanger Bar */
+.jersey-hanger-bar {
+  width: 100px;
+  height: 8px;
+  background: linear-gradient(180deg, #b45309 0%, #78350f 100%);
+  border-radius: 4px;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5);
+  margin-bottom: -6px;
+  z-index: 2;
+}
+
+/* Inactive jerseys on rack */
+.locker-jersey-unit:not(.active) {
+  opacity: 0.75;
+  transform: translateY(0) scale(0.92);
+  filter: brightness(0.85);
+}
+
+.locker-jersey-unit:not(.active):hover {
+  opacity: 1;
+  transform: translateY(-8px) scale(0.97);
+  filter: brightness(1.05);
+}
+
+/* Active 3D Focus Jersey (Pulls forward off the rail into the spotlight) */
+.locker-jersey-unit.active {
+  opacity: 1;
+  transform: translateY(-16px) translateZ(80px) scale(1.16);
+  filter: brightness(1.15) drop-shadow(0 20px 30px rgba(0, 0, 0, 0.8));
+  z-index: 10;
+}
+
+.locker-jersey-unit.active .jersey-hanger-hook {
+  border-color: #38bdf8;
+  transform: translateY(-4px);
+}
+
+/* ==========================================================================
+   Jersey Silhouette & Texture Rendering
+   ========================================================================== */
+.jersey-card {
+  position: relative;
+  width: 120px;
+  height: 160px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0.75rem 0.5rem 0.6rem;
+  transition: all 0.3s ease;
+  transform-style: preserve-3d;
+}
+
+/* Fabric creases & textured weave */
+.jersey-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.03) 0px,
+    rgba(255, 255, 255, 0.03) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+  pointer-events: none;
+}
+
+/* Realistic collar curve */
+.jersey-collar {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 46px;
+  height: 18px;
+  border-radius: 50%;
+  background: #0f172a;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  z-index: 4;
+}
+
+/* Jersey Back View: Big Number & Name */
+.jersey-back {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  position: relative;
+  z-index: 2;
+  text-align: center;
+}
+
+.jersey-back-name {
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  margin-bottom: 0.25rem;
+  line-height: 1;
+}
+
+.jersey-back-number {
+  font-size: 3.5rem;
+  font-weight: 900;
+  line-height: 0.9;
+  color: #ffffff;
+  text-shadow: 0 4px 10px rgba(0, 0, 0, 0.9), 0 1px 2px rgba(255, 255, 255, 0.4);
+  letter-spacing: -0.05em;
+  font-family: Impact, "Arial Black", sans-serif;
+}
+
+/* Jersey Front View: Crest & Sponsor */
+.jersey-front {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  position: relative;
+  z-index: 2;
+}
+
+.jersey-front-top {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.jersey-front-crest {
+  font-size: 1.25rem;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+}
+
+.jersey-front-sponsor {
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  margin: auto 0;
+}
+
+/* Player tag beneath the jersey */
+.jersey-shelf-label {
+  margin-top: 0.65rem;
+  text-align: center;
+  background: rgba(15, 23, 42, 0.8);
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #cbd5e1;
+  transition: all 0.2s ease;
+}
+
+.locker-jersey-unit.active .jersey-shelf-label {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+/* Floor Lighting & Controls Bar */
+.locker-floor-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.locker-instruction {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.locker-nav-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.locker-nav-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.locker-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ==========================================================================
+   Right Panel: SQUAD SHEET & Player Dossier
+   High-contrast HUD matching broadcast graphics in the user's video
+   ========================================================================== */
+.locker-dossier-panel {
+  background: rgba(11, 15, 25, 0.95);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 1.75rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: inset 10px 0 30px rgba(0, 0, 0, 0.4);
+}
+
+.dossier-card {
+  position: relative;
+  background: rgba(20, 27, 43, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+}
+
+/* Red / Accent Broadcast Header Ribbon */
+.dossier-ribbon {
+  height: 4px;
+  background: linear-gradient(90deg, #ef4444 0%, #f97316 50%, #10b981 100%);
+}
+
+.dossier-header {
+  padding: 1.25rem 1.25rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dossier-league-tag {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ef4444;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.dossier-hero-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.dossier-big-number {
+  font-size: 2.8rem;
+  font-weight: 900;
+  line-height: 0.9;
+  color: #ffffff;
+  font-family: Impact, "Arial Black", sans-serif;
+  letter-spacing: -0.05em;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+}
+
+.dossier-player-name {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.dossier-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+/* Player Bio Matrix */
+.dossier-bio-grid {
+  padding: 1rem 1.25rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.bio-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.bio-item-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  margin-bottom: 0.15rem;
+}
+
+.bio-item-value {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+/* Performance Metrics Box */
+.dossier-stats-strip {
+  padding: 1.25rem;
+  background: rgba(15, 23, 42, 0.5);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.stat-box {
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.6rem 0.4rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.stat-box-val {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #10b981;
+  font-family: Impact, "Arial Black", sans-serif;
+}
+
+.stat-box-lbl {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  margin-top: 0.2rem;
+}
+
+/* Dossier Footer / Quick Switch */
+.dossier-footer {
+  margin-top: 1.25rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.dossier-action-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #f8fafc;
+  padding: 0.65rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  transition: all 0.2s ease;
+}
+
+.dossier-action-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.dossier-action-btn.primary {
+  background: #ef4444;
+  border-color: #f87171;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.dossier-action-btn.primary:hover {
+  background: #dc2626;
+}
