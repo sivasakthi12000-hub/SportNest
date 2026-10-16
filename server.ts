@@ -293,7 +293,14 @@ async function startServer() {
   // 1. Response Compression (gzip / deflate shrinks traffic by up to 80%)
   app.use(compression({ threshold: 1024 }));
 
-  // 2. Safe JSON parser limit
+  // 2. Safe Headers (Permits AI Studio iframe embedding)
+  app.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    next();
+  });
+
+  // 3. Safe JSON parser limit
   app.use(express.json({ limit: "5mb" }));
 
   // 3. Global Traffic Metrics Recording & Rate Limiter

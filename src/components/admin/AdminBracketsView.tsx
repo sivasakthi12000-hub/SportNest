@@ -20,6 +20,8 @@ import {
   TournamentFormatType,
   ScheduledMatchFixture,
   generateTournamentSchedule,
+  calculateStandings,
+  propagateBracketWinners,
 } from "../../services/scheduleFeasibilityService";
 
 interface AdminBracketsViewProps {
@@ -102,9 +104,14 @@ export const AdminBracketsView: React.FC<AdminBracketsViewProps> = ({ tournament
     }));
   };
 
+  // Dynamic bracket winner propagation
+  const liveFixtures = useMemo(() => {
+    return propagateBracketWinners(generatedSchedule.fixtures || [], matchWinners);
+  }, [generatedSchedule, matchWinners]);
+
   const handleExportSchedule = () => {
     const headers = ["Match #", "Round", "Stage", "Team A", "Team B", "Date", "Time Slot", "Venue", "Status"];
-    const rows = generatedSchedule.fixtures.map((f) => [
+    const rows = liveFixtures.map((f) => [
       f.matchNumber,
       f.roundName,
       f.stage,
@@ -132,13 +139,13 @@ export const AdminBracketsView: React.FC<AdminBracketsViewProps> = ({ tournament
   // Group fixtures by stage/round for knockout view
   const knockoutRoundsGrouped = useMemo(() => {
     const map: Record<string, ScheduledMatchFixture[]> = {};
-    generatedSchedule.fixtures.forEach((f) => {
+    liveFixtures.forEach((f) => {
       const key = f.roundName || "Round";
       if (!map[key]) map[key] = [];
       map[key].push(f);
     });
     return map;
-  }, [generatedSchedule]);
+  }, [liveFixtures]);
 
   return (
     <div className="admin-view-container">
@@ -566,7 +573,7 @@ export const AdminBracketsView: React.FC<AdminBracketsViewProps> = ({ tournament
                 </tr>
               </thead>
               <tbody>
-                {generatedSchedule.fixtures.map((f) => {
+                {liveFixtures.map((f) => {
                   const winner = matchWinners[f.id];
                   return (
                     <tr key={f.id}>
@@ -685,60 +692,68 @@ export const AdminBracketsView: React.FC<AdminBracketsViewProps> = ({ tournament
       {activeTab === "standings" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
           {generatedSchedule.groups ? (
-            Object.entries(generatedSchedule.groups).map(([groupName, gTeams]) => (
-              <div key={groupName} className="admin-data-card" style={{ padding: "0" }}>
-                <div
-                  style={{
-                    padding: "1rem 1.25rem",
-                    borderBottom: "1px solid #e2e8f0",
-                    background: "#f8fafc",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>
-                    {groupName} Standings
-                  </h3>
-                  <span style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600 }}>
-                    Top {selectedTourney?.advancingPerGroup || 2} advance to Knockouts
-                  </span>
-                </div>
+            Object.entries(generatedSchedule.groups).map(([groupName, gTeams]) => {
+              const groupFixtures = liveFixtures.filter((f) => f.groupName === groupName);
+              const gStandings = calculateStandings(
+                gTeams,
+                groupFixtures,
+                matchWinners,
+                selectedTourney?.sportName || selectedTourney?.sport || "Soccer",
+                selectedTourney?.advancingPerGroup || 2
+              );
 
-                <div style={{ overflowX: "auto" }}>
-                  <table className="admin-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: "50px" }}>Pos</th>
-                        <th>Team</th>
-                        <th style={{ textAlign: "center" }}>P</th>
-                        <th style={{ textAlign: "center" }}>W</th>
-                        <th style={{ textAlign: "center" }}>D</th>
-                        <th style={{ textAlign: "center" }}>L</th>
-                        <th style={{ textAlign: "center" }}>Pts</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {gTeams.map((t, idx) => {
-                        const advancingLimit = selectedTourney?.advancingPerGroup || 2;
-                        const isAdvancing = idx < advancingLimit;
+              return (
+                <div key={groupName} className="admin-data-card" style={{ padding: "0" }}>
+                  <div
+                    style={{
+                      padding: "1rem 1.25rem",
+                      borderBottom: "1px solid #e2e8f0",
+                      background: "#f8fafc",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>
+                      {groupName} Standings
+                    </h3>
+                    <span style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600 }}>
+                      Top {selectedTourney?.advancingPerGroup || 2} advance to Knockouts • Dynamic Points
+                    </span>
+                  </div>
 
-                        return (
-                          <tr key={t.id} style={{ background: isAdvancing ? "#f0fdf4" : "transparent" }}>
-                            <td style={{ fontWeight: 800, color: isAdvancing ? "#059669" : "#64748b" }}>
+                  <div style={{ overflowX: "auto" }}>
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: "50px" }}>Pos</th>
+                          <th>Team</th>
+                          <th style={{ textAlign: "center" }}>P</th>
+                          <th style={{ textAlign: "center" }}>W</th>
+                          <th style={{ textAlign: "center" }}>D</th>
+                          <th style={{ textAlign: "center" }}>L</th>
+                          <th style={{ textAlign: "center" }}>Pts</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {gStandings.map((s, idx) => (
+                          <tr key={s.id} style={{ background: s.isAdvancing ? "#f0fdf4" : "transparent" }}>
+                            <td style={{ fontWeight: 800, color: s.isAdvancing ? "#059669" : "#64748b" }}>
                               {idx + 1}
                             </td>
                             <td style={{ fontWeight: 700, color: "#0f172a" }}>
-                              {t.name}
+                              {s.name}
                             </td>
-                            <td style={{ textAlign: "center" }}>0</td>
-                            <td style={{ textAlign: "center" }}>0</td>
-                            <td style={{ textAlign: "center" }}>0</td>
-                            <td style={{ textAlign: "center" }}>0</td>
-                            <td style={{ textAlign: "center", fontWeight: 800, color: "#0f172a" }}>0</td>
+                            <td style={{ textAlign: "center" }}>{s.played}</td>
+                            <td style={{ textAlign: "center", color: "#059669", fontWeight: 600 }}>{s.won}</td>
+                            <td style={{ textAlign: "center", color: "#64748b" }}>{s.drawn}</td>
+                            <td style={{ textAlign: "center", color: "#ef4444" }}>{s.lost}</td>
+                            <td style={{ textAlign: "center", fontWeight: 800, color: s.isAdvancing ? "#059669" : "#0f172a" }}>
+                              {s.points}
+                            </td>
                             <td>
-                              {isAdvancing ? (
+                              {s.isAdvancing ? (
                                 <span
                                   style={{
                                     fontSize: "0.75rem",
@@ -758,13 +773,13 @@ export const AdminBracketsView: React.FC<AdminBracketsViewProps> = ({ tournament
                               )}
                             </td>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <div className="admin-data-card" style={{ padding: "2rem", textAlign: "center" }}>
               <p style={{ color: "#64748b", margin: 0 }}>

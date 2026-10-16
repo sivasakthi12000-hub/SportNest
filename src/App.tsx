@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate, Link } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
@@ -47,6 +47,48 @@ function SessionRouteRestorer() {
   return null;
 }
 
+function NotFound() {
+  return (
+    <div style={{ maxWidth: "600px", margin: "5rem auto", textAlign: "center", padding: "2rem" }}>
+      <div style={{ fontSize: "3.5rem", marginBottom: "1rem" }}>🏟️</div>
+      <h1 style={{ fontSize: "2rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.5rem" }}>
+        Page Not Found
+      </h1>
+      <p style={{ color: "#64748b", marginBottom: "2rem", lineHeight: 1.6 }}>
+        The tournament, schedule, or page you are looking for does not exist or may have been relocated.
+      </p>
+      <div style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap" }}>
+        <Link
+          to="/"
+          style={{
+            background: "#10b981",
+            color: "#ffffff",
+            padding: "0.6rem 1.25rem",
+            borderRadius: "10px",
+            fontWeight: 700,
+            textDecoration: "none",
+          }}
+        >
+          Return Home
+        </Link>
+        <Link
+          to="/tournaments"
+          style={{
+            background: "#f1f5f9",
+            color: "#334155",
+            padding: "0.6rem 1.25rem",
+            borderRadius: "10px",
+            fontWeight: 700,
+            textDecoration: "none",
+          }}
+        >
+          Explore Tournaments
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary fallbackTitle="Application Error">
@@ -69,6 +111,7 @@ export default function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/admin" element={<Dashboard />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </ErrorBoundary>
         </AuthProvider>

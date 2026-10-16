@@ -564,3 +564,190 @@ export function generateTournamentSchedule(
     fixtures,
   };
 }
+
+export interface TeamStanding {
+  id: string | number;
+  name: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  scoreFor: number;
+  scoreAgainst: number;
+  scoreDifference: number;
+  points: number;
+  isAdvancing?: boolean;
+}
+
+export function getSportPointsConfig(sportName: string = ""): {
+  winPoints: number;
+  drawPoints: number;
+  lossPoints: number;
+  supportsDraw: boolean;
+  scoreLabel: string;
+} {
+  const s = (sportName || "").toLowerCase();
+  if (s.includes("soccer") || s.includes("football") || s.includes("hockey")) {
+    return { winPoints: 3, drawPoints: 1, lossPoints: 0, supportsDraw: true, scoreLabel: "Goals" };
+  }
+  if (s.includes("kabaddi")) {
+    return { winPoints: 5, drawPoints: 3, lossPoints: 0, supportsDraw: true, scoreLabel: "Points" };
+  }
+  if (s.includes("cricket")) {
+    return { winPoints: 2, drawPoints: 1, lossPoints: 0, supportsDraw: true, scoreLabel: "Runs" };
+  }
+  if (s.includes("basket")) {
+    return { winPoints: 2, drawPoints: 1, lossPoints: 1, supportsDraw: false, scoreLabel: "Points" };
+  }
+  if (s.includes("volley")) {
+    return { winPoints: 3, drawPoints: 1, lossPoints: 1, supportsDraw: false, scoreLabel: "Sets" };
+  }
+  return { winPoints: 2, drawPoints: 1, lossPoints: 0, supportsDraw: false, scoreLabel: "Points" };
+}
+
+/**
+ * Calculates official points table and standings for a group or round-robin pool
+ * based on completed match outcomes and sport-specific rules.
+ */
+export function calculateStandings(
+  teams: Array<{ id?: string | number; name: string }>,
+  fixtures: ScheduledMatchFixture[],
+  matchWinners: Record<string, string>,
+  sportName: string = "",
+  advancingCount: number = 2
+): TeamStanding[] {
+  const config = getSportPointsConfig(sportName);
+  const standingsMap = new Map<string, TeamStanding>();
+
+  teams.forEach((t, idx) => {
+    standingsMap.set(t.name, {
+      id: t.id ?? `team-${idx + 1}`,
+      name: t.name,
+      played: 0,
+      won: 0,
+      drawn: 0,
+      lost: 0,
+      scoreFor: 0,
+      scoreAgainst: 0,
+      scoreDifference: 0,
+      points: 0,
+    });
+  });
+
+  fixtures.forEach((f) => {
+    const tAName = f.teamA?.name;
+    const tBName = f.teamB?.name;
+    if (!tAName || !tBName || tAName === "TBD" || tBName === "TBD") return;
+
+    const winner = matchWinners[f.id];
+    if (!winner) return;
+
+    const statA = standingsMap.get(tAName) || {
+      id: f.teamA?.id ?? tAName,
+      name: tAName,
+      played: 0,
+      won: 0,
+      drawn: 0,
+      lost: 0,
+      scoreFor: 0,
+      scoreAgainst: 0,
+      scoreDifference: 0,
+      points: 0,
+    };
+
+    const statB = standingsMap.get(tBName) || {
+      id: f.teamB?.id ?? tBName,
+      name: tBName,
+      played: 0,
+      won: 0,
+      drawn: 0,
+      lost: 0,
+      scoreFor: 0,
+      scoreAgainst: 0,
+      scoreDifference: 0,
+      points: 0,
+    };
+
+    statA.played += 1;
+    statB.played += 1;
+
+    if (winner === "Draw" || winner === "Tie") {
+      statA.drawn += 1;
+      statB.drawn += 1;
+      statA.points += config.drawPoints;
+      statB.points += config.drawPoints;
+    } else if (winner === tAName) {
+      statA.won += 1;
+      statB.lost += 1;
+      statA.points += config.winPoints;
+      statA.points += config.lossPoints;
+    } else if (winner === tBName) {
+      statB.won += 1;
+      statA.lost += 1;
+      statB.points += config.winPoints;
+      statA.points += config.lossPoints;
+    }
+
+    standingsMap.set(tAName, statA);
+    standingsMap.set(tBName, statB);
+  });
+
+  const sortedList = Array.from(standingsMap.values()).sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    if (b.won !== a.won) return b.won - a.won;
+    return a.name.localeCompare(b.name);
+  });
+
+  return sortedList.map((item, index) => ({
+    ...item,
+    isAdvancing: index < advancingCount,
+  }));
+}
+
+/**
+ * Dynamically resolves bracket advancement from match winners
+ * so subsequent rounds (Quarterfinals, Semifinals, Championship Final)
+ * update from "Winner Match X" to the actual qualified team name.
+ */
+export function propagateBracketWinners(
+  fixtures: ScheduledMatchFixture[],
+  matchWinners: Record<string, string>
+): ScheduledMatchFixture[] {
+  if (!fixtures || fixtures.length === 0) return [];
+  if (!matchWinners || Object.keys(matchWinners).length === 0) return fixtures;
+
+  return fixtures.map((f) => {
+    let updatedTeamA = { ...f.teamA };
+    let updatedTeamB = { ...f.teamB };
+
+    // Resolve team A if it depends on a previous match winner
+    const tAName = f.teamA?.name || "";
+    const tAId = String(f.teamA?.id || "");
+    const matchNumMatchA = tAName.match(/Winner Match\s*(\d+)/i) || tAId.match(/^W-M(\d+)/i);
+    if (matchNumMatchA) {
+      const parentMatchId = `M-${matchNumMatchA[1]}`;
+      const parentWinner = matchWinners[parentMatchId];
+      if (parentWinner && parentWinner !== "Draw") {
+        updatedTeamA = { ...updatedTeamA, name: parentWinner };
+      }
+    }
+
+    // Resolve team B if it depends on a previous match winner
+    const tBName = f.teamB?.name || "";
+    const tBId = String(f.teamB?.id || "");
+    const matchNumMatchB = tBName.match(/Winner Match\s*(\d+)/i) || tBId.match(/^W-M(\d+)/i);
+    if (matchNumMatchB) {
+      const parentMatchId = `M-${matchNumMatchB[1]}`;
+      const parentWinner = matchWinners[parentMatchId];
+      if (parentWinner && parentWinner !== "Draw") {
+        updatedTeamB = { ...updatedTeamB, name: parentWinner };
+      }
+    }
+
+    return {
+      ...f,
+      teamA: updatedTeamA,
+      teamB: updatedTeamB,
+    };
+  });
+}

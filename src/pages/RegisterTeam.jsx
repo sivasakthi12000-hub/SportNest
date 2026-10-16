@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { registerTeam } from "../services/dataService";
+import { registerTeam, getTeamsByTournamentId } from "../services/dataService";
 import "../styles/forms.css";
 
 const RegisterTeam = () => {
@@ -33,22 +33,63 @@ const RegisterTeam = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (teamName.trim() === "" || players.some((p) => p.name.trim() === "")) {
-      setError("Please fill in team name and all player names");
+    const cleanTeamName = teamName.trim();
+
+    if (!cleanTeamName) {
+      setError("Please enter a valid team name.");
       return;
     }
+
+    if (cleanTeamName.length > 60) {
+      setError("Team name cannot exceed 60 characters.");
+      return;
+    }
+
+    if (players.some((p) => !p.name.trim())) {
+      setError("Please fill in names for all players in the squad roster.");
+      return;
+    }
+
+    // Check for duplicate player names within the roster
+    const playerNamesLower = players.map((p) => p.name.trim().toLowerCase());
+    const uniquePlayerNames = new Set(playerNamesLower);
+    if (uniquePlayerNames.size !== playerNamesLower.length) {
+      setError("Duplicate player names detected. Each player in the squad must have a unique name.");
+      return;
+    }
+
     setLoading(true);
-    const res = await registerTeam({
-      name: teamName,
-      tournamentId: Number(tournamentId),
-      members: players.length,
-      group: "A",
-    });
-    setLoading(false);
-    if (res.success) {
-      setSubmitted(true);
-    } else {
-      setError(res.error || "Failed to register team");
+    setError("");
+
+    try {
+      // Check for duplicate team name within this tournament
+      const existingTeams = await getTeamsByTournamentId(Number(tournamentId));
+      const isDuplicate = existingTeams.some(
+        (t) => (t.name || "").trim().toLowerCase() === cleanTeamName.toLowerCase()
+      );
+
+      if (isDuplicate) {
+        setError(`A team named "${cleanTeamName}" is already registered for this tournament.`);
+        setLoading(false);
+        return;
+      }
+
+      const res = await registerTeam({
+        name: cleanTeamName,
+        tournamentId: Number(tournamentId),
+        members: players.length,
+        group: "A",
+      });
+
+      setLoading(false);
+      if (res.success) {
+        setSubmitted(true);
+      } else {
+        setError(res.error || "Failed to register team");
+      }
+    } catch (err) {
+      setLoading(false);
+      setError("An unexpected error occurred while registering the team. Please try again.");
     }
   };
 

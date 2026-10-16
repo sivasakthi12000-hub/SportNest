@@ -15,8 +15,12 @@ import {
   Shield,
   Shuffle,
 } from "lucide-react";
-import { getTournamentById, getTeamsByTournamentId } from "../services/dataService";
-import { generateTournamentSchedule } from "../services/scheduleFeasibilityService";
+import {
+  generateTournamentSchedule,
+  calculateStandings,
+  propagateBracketWinners,
+  getSportPointsConfig,
+} from "../services/scheduleFeasibilityService";
 import "../styles/tournament.css";
 
 const Bracket = () => {
@@ -117,11 +121,26 @@ const Bracket = () => {
     );
   }, [tournament, teams, selectedFormat]);
 
+  // Dynamic bracket winner propagation
+  const liveFixtures = useMemo(() => {
+    const raw = scheduleData?.fixtures || [];
+    return propagateBracketWinners(raw, matchWinners);
+  }, [scheduleData, matchWinners]);
+
+  const grandChampion = useMemo(() => {
+    const finalMatch = liveFixtures.find((f) => f.stage === "final");
+    return finalMatch && matchWinners[finalMatch.id] ? matchWinners[finalMatch.id] : null;
+  }, [liveFixtures, matchWinners]);
+
   const handleToggleWinner = (matchId, teamName) => {
     setMatchWinners((prev) => ({
       ...prev,
       [matchId]: prev[matchId] === teamName ? "" : teamName,
     }));
+  };
+
+  const handleResetWinners = () => {
+    setMatchWinners({});
   };
 
   if (loading) {
@@ -373,6 +392,72 @@ const Bracket = () => {
       {/* TAB 1: Bracket Tree */}
       {activeTab === "bracket" && (
         <div>
+          {/* Grand Champion Trophy Celebration Banner */}
+          {grandChampion && (
+            <div
+              style={{
+                background: "linear-gradient(135deg, #059669 0%, #10b981 50%, #047857 100%)",
+                color: "#ffffff",
+                borderRadius: "16px",
+                padding: "1.25rem 1.75rem",
+                marginBottom: "1.5rem",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "1rem",
+                boxShadow: "0 10px 25px rgba(16, 185, 129, 0.25)",
+                border: "1px solid rgba(255, 255, 255, 0.25)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                <div style={{ fontSize: "2.5rem", lineHeight: 1 }}>🏆</div>
+                <div>
+                  <div
+                    style={{
+                      fontSize: "0.75rem",
+                      textTransform: "uppercase",
+                      letterSpacing: "1px",
+                      fontWeight: 800,
+                      color: "#a7f3d0",
+                    }}
+                  >
+                    Tournament Champion
+                  </div>
+                  <div style={{ fontSize: "1.6rem", fontWeight: 900 }}>{grandChampion}</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <span
+                  style={{
+                    background: "rgba(255, 255, 255, 0.2)",
+                    padding: "0.4rem 1rem",
+                    borderRadius: "999px",
+                    fontWeight: 700,
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  1st Place Winner 🥇
+                </span>
+                <button
+                  onClick={handleResetWinners}
+                  style={{
+                    background: "rgba(0, 0, 0, 0.2)",
+                    color: "#ffffff",
+                    border: "1px solid rgba(255, 255, 255, 0.3)",
+                    padding: "0.4rem 0.85rem",
+                    borderRadius: "8px",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Reset Results
+                </button>
+              </div>
+            </div>
+          )}
+
           {teams.length < 2 && (
             <div
               style={{
@@ -394,20 +479,39 @@ const Bracket = () => {
                   Showing projected bracket slots based on {tournament.maxTeams || 16} tournament capacity. Real team names fill in automatically as registrations are confirmed.
                 </span>
               </div>
-              <Link
-                to={`/register/${tournamentId}`}
-                style={{
-                  background: "#10b981",
-                  color: "#ffffff",
-                  padding: "0.45rem 1rem",
-                  borderRadius: "8px",
-                  fontSize: "0.82rem",
-                  fontWeight: 700,
-                  textDecoration: "none",
-                }}
-              >
-                Register a Team
-              </Link>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                {Object.keys(matchWinners).length > 0 && (
+                  <button
+                    onClick={handleResetWinners}
+                    style={{
+                      background: "#f1f5f9",
+                      color: "#475569",
+                      border: "1px solid #cbd5e1",
+                      padding: "0.45rem 0.85rem",
+                      borderRadius: "8px",
+                      fontSize: "0.82rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Reset
+                  </button>
+                )}
+                <Link
+                  to={`/register/${tournamentId}`}
+                  style={{
+                    background: "#10b981",
+                    color: "#ffffff",
+                    padding: "0.45rem 1rem",
+                    borderRadius: "8px",
+                    fontSize: "0.82rem",
+                    fontWeight: 700,
+                    textDecoration: "none",
+                  }}
+                >
+                  Register a Team
+                </Link>
+              </div>
             </div>
           )}
 
@@ -430,7 +534,7 @@ const Bracket = () => {
           >
             <div style={{ display: "flex", gap: "3rem", minWidth: "max-content", alignItems: "center" }}>
               {(() => {
-                const fixtures = scheduleData?.fixtures || [];
+                const fixtures = liveFixtures;
                 const roundsMap = {};
                 fixtures.forEach((f) => {
                   const rName = f.roundName || "Match";
@@ -580,7 +684,7 @@ const Bracket = () => {
                 </tr>
               </thead>
               <tbody>
-                {(scheduleData?.fixtures || []).map((f) => {
+                {(liveFixtures || []).map((f) => {
                   const winner = matchWinners[f.id];
                   return (
                     <tr
@@ -656,6 +760,14 @@ const Bracket = () => {
                   }));
 
             if (isRoundRobin) {
+              const rrStandings = calculateStandings(
+                confirmedList,
+                liveFixtures,
+                matchWinners,
+                tournament.sportName || tournament.sport || "Soccer",
+                tournament.advancingPerGroup || 4
+              );
+
               return (
                 <div
                   style={{
@@ -666,27 +778,76 @@ const Bracket = () => {
                     padding: "1.5rem",
                   }}
                 >
-                  <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.1rem", fontWeight: 800, color: "#0f172a" }}>
-                    Round Robin Points Table
-                  </h3>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "1rem",
+                      flexWrap: "wrap",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800, color: "#0f172a" }}>
+                      Round Robin Points Table
+                    </h3>
+                    <span style={{ fontSize: "0.8rem", color: "#64748b" }}>
+                      Points calculated dynamically according to official {tournament.sportName || "sport"} tournament scoring
+                    </span>
+                  </div>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
                     <thead>
                       <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0", textAlign: "left" }}>
                         <th style={{ padding: "0.6rem 0.8rem", color: "#475569" }}>Rank</th>
                         <th style={{ padding: "0.6rem 0.8rem", color: "#475569" }}>Team</th>
-                        <th style={{ padding: "0.6rem 0.8rem", color: "#475569" }}>Played</th>
-                        <th style={{ padding: "0.6rem 0.8rem", color: "#475569" }}>Won</th>
-                        <th style={{ padding: "0.6rem 0.8rem", color: "#475569" }}>Points</th>
+                        <th style={{ padding: "0.6rem 0.8rem", color: "#475569", textAlign: "center" }}>P</th>
+                        <th style={{ padding: "0.6rem 0.8rem", color: "#475569", textAlign: "center" }}>W</th>
+                        <th style={{ padding: "0.6rem 0.8rem", color: "#475569", textAlign: "center" }}>D</th>
+                        <th style={{ padding: "0.6rem 0.8rem", color: "#475569", textAlign: "center" }}>L</th>
+                        <th style={{ padding: "0.6rem 0.8rem", color: "#475569", textAlign: "center" }}>PTS</th>
+                        <th style={{ padding: "0.6rem 0.8rem", color: "#475569" }}>Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {confirmedList.map((t, idx) => (
-                        <tr key={t.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                          <td style={{ padding: "0.6rem 0.8rem", fontWeight: 800 }}>#{idx + 1}</td>
-                          <td style={{ padding: "0.6rem 0.8rem", fontWeight: 700, color: "#0f172a" }}>{t.name}</td>
-                          <td style={{ padding: "0.6rem 0.8rem", color: "#64748b" }}>0</td>
-                          <td style={{ padding: "0.6rem 0.8rem", color: "#64748b" }}>0</td>
-                          <td style={{ padding: "0.6rem 0.8rem", fontWeight: 800, color: "#059669" }}>0</td>
+                      {rrStandings.map((s, idx) => (
+                        <tr
+                          key={s.id}
+                          style={{
+                            borderBottom: "1px solid #f1f5f9",
+                            background: s.isAdvancing ? "#f0fdf4" : undefined,
+                          }}
+                        >
+                          <td style={{ padding: "0.6rem 0.8rem", fontWeight: 800, color: s.isAdvancing ? "#059669" : "#64748b" }}>
+                            #{idx + 1}
+                          </td>
+                          <td style={{ padding: "0.6rem 0.8rem", fontWeight: 700, color: "#0f172a" }}>
+                            {s.name}
+                          </td>
+                          <td style={{ padding: "0.6rem 0.8rem", textAlign: "center", color: "#334155" }}>{s.played}</td>
+                          <td style={{ padding: "0.6rem 0.8rem", textAlign: "center", color: "#059669", fontWeight: 600 }}>{s.won}</td>
+                          <td style={{ padding: "0.6rem 0.8rem", textAlign: "center", color: "#64748b" }}>{s.drawn}</td>
+                          <td style={{ padding: "0.6rem 0.8rem", textAlign: "center", color: "#ef4444" }}>{s.lost}</td>
+                          <td style={{ padding: "0.6rem 0.8rem", textAlign: "center", fontWeight: 800, color: s.isAdvancing ? "#059669" : "#0f172a" }}>
+                            {s.points}
+                          </td>
+                          <td style={{ padding: "0.6rem 0.8rem" }}>
+                            {s.isAdvancing ? (
+                              <span
+                                style={{
+                                  fontSize: "0.72rem",
+                                  background: "#dcfce7",
+                                  color: "#15803d",
+                                  padding: "2px 8px",
+                                  borderRadius: "999px",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                Qualified
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: "0.72rem", color: "#94a3b8" }}>—</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -706,75 +867,93 @@ const Bracket = () => {
               groups[gName].push(t);
             });
 
-            return Object.entries(groups).map(([groupName, gTeams]) => (
-              <div
-                key={groupName}
-                style={{
-                  background: "#ffffff",
-                  borderRadius: "16px",
-                  border: "1px solid #e2e8f0",
-                  padding: "1.25rem",
-                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
-                }}
-              >
+            return Object.entries(groups).map(([groupName, gTeams]) => {
+              const groupFixtures = liveFixtures.filter((f) => f.groupName === groupName);
+              const gStandings = calculateStandings(
+                gTeams,
+                groupFixtures,
+                matchWinners,
+                tournament.sportName || tournament.sport || "Soccer",
+                tournament.advancingPerGroup || 2
+              );
+
+              return (
                 <div
+                  key={groupName}
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: "0.75rem",
+                    background: "#ffffff",
+                    borderRadius: "16px",
+                    border: "1px solid #e2e8f0",
+                    padding: "1.25rem",
+                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
                   }}
                 >
-                  <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>
-                    {groupName}
-                  </h3>
-                  <span
+                  <div
                     style={{
-                      fontSize: "0.72rem",
-                      fontWeight: 700,
-                      background: "#ecfdf5",
-                      color: "#065f46",
-                      padding: "2px 8px",
-                      borderRadius: "999px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "0.75rem",
                     }}
                   >
-                    Top {tournament.advancingPerGroup || 2} advance
-                  </span>
-                </div>
+                    <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>
+                      {groupName}
+                    </h3>
+                    <span
+                      style={{
+                        fontSize: "0.72rem",
+                        fontWeight: 700,
+                        background: "#ecfdf5",
+                        color: "#065f46",
+                        padding: "2px 8px",
+                        borderRadius: "999px",
+                      }}
+                    >
+                      Top {tournament.advancingPerGroup || 2} advance
+                    </span>
+                  </div>
 
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
-                  <thead>
-                    <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0", textAlign: "left" }}>
-                      <th style={{ padding: "0.5rem", color: "#475569" }}>Team</th>
-                      <th style={{ padding: "0.5rem", color: "#475569", textAlign: "center" }}>P</th>
-                      <th style={{ padding: "0.5rem", color: "#475569", textAlign: "center" }}>PTS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {gTeams.map((t, idx) => {
-                      const isAdvancing = idx < (tournament.advancingPerGroup || 2);
-                      return (
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0", textAlign: "left" }}>
+                        <th style={{ padding: "0.5rem", color: "#475569", width: "40px" }}>Pos</th>
+                        <th style={{ padding: "0.5rem", color: "#475569" }}>Team</th>
+                        <th style={{ padding: "0.5rem", color: "#475569", textAlign: "center" }}>P</th>
+                        <th style={{ padding: "0.5rem", color: "#475569", textAlign: "center" }}>W</th>
+                        <th style={{ padding: "0.5rem", color: "#475569", textAlign: "center" }}>D</th>
+                        <th style={{ padding: "0.5rem", color: "#475569", textAlign: "center" }}>L</th>
+                        <th style={{ padding: "0.5rem", color: "#475569", textAlign: "center" }}>PTS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gStandings.map((s, idx) => (
                         <tr
-                          key={t.id}
+                          key={s.id}
                           style={{
                             borderBottom: "1px solid #f1f5f9",
-                            background: isAdvancing ? "#f0fdf4" : undefined,
+                            background: s.isAdvancing ? "#f0fdf4" : undefined,
                           }}
                         >
-                          <td style={{ padding: "0.5rem", fontWeight: isAdvancing ? 700 : 500, color: isAdvancing ? "#065f46" : "#334155" }}>
-                            {idx + 1}. {t.name}
+                          <td style={{ padding: "0.5rem", fontWeight: 800, color: s.isAdvancing ? "#059669" : "#64748b" }}>
+                            {idx + 1}
                           </td>
-                          <td style={{ padding: "0.5rem", textAlign: "center", color: "#64748b" }}>0</td>
-                          <td style={{ padding: "0.5rem", textAlign: "center", fontWeight: 800, color: isAdvancing ? "#059669" : "#64748b" }}>
-                            0
+                          <td style={{ padding: "0.5rem", fontWeight: s.isAdvancing ? 700 : 500, color: s.isAdvancing ? "#065f46" : "#334155" }}>
+                            {s.name}
+                          </td>
+                          <td style={{ padding: "0.5rem", textAlign: "center", color: "#475569" }}>{s.played}</td>
+                          <td style={{ padding: "0.5rem", textAlign: "center", color: "#059669" }}>{s.won}</td>
+                          <td style={{ padding: "0.5rem", textAlign: "center", color: "#64748b" }}>{s.drawn}</td>
+                          <td style={{ padding: "0.5rem", textAlign: "center", color: "#ef4444" }}>{s.lost}</td>
+                          <td style={{ padding: "0.5rem", textAlign: "center", fontWeight: 800, color: s.isAdvancing ? "#059669" : "#0f172a" }}>
+                            {s.points}
                           </td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ));
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            });
           })()}
         </div>
       )}
