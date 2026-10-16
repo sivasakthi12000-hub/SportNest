@@ -15,6 +15,7 @@ import {
   Shield,
   Shuffle,
 } from "lucide-react";
+import { getTournamentById, getTeamsByTournamentId } from "../services/dataService";
 import {
   generateTournamentSchedule,
   calculateStandings,

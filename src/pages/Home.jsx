@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Trophy, ArrowRight, Calendar, Sparkles } from "lucide-react";
 import { getSports, getTournaments } from "../services/dataService";
-import SportShowcaseHero from "../components/SportShowcaseHero";
+import HomeBannerSlider from "../components/HomeBannerSlider";
 import TournamentCard from "../components/TournamentCard";
 
 const Home = () => {
@@ -36,7 +36,8 @@ const Home = () => {
 
   return (
     <div className="home-showcase-container">
-      <SportShowcaseHero sports={sports} showAllGroundsGrid={true} />
+      {/* Premier Sideways Moving Banner Slider */}
+      <HomeBannerSlider totalTournamentsCount={tournaments.length} />
 
       {featuredTournaments.length > 0 && (
         <section

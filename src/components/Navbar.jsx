@@ -9,7 +9,6 @@ import "../styles/navbar.css";
 const Navbar = () => {
   const [sports, setSports] = useState([]);
   const [tournamentCount, setTournamentCount] = useState(0);
-  const [showSportsDropdown, setShowSportsDropdown] = useState(false);
   const [showManageDropdown, setShowManageDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -83,53 +82,14 @@ const Navbar = () => {
           Home
         </Link>
 
-        {/* Dynamic Sports Dropdown from Supabase */}
-        <div
-          className="nav-dropdown"
-          onMouseEnter={() => setShowSportsDropdown(true)}
-          onMouseLeave={() => setShowSportsDropdown(false)}
+        {/* Direct Sports Link */}
+        <Link
+          to="/sports"
+          className={`nav-item ${location.pathname.startsWith("/sports") ? "nav-item-active" : ""}`}
+          onClick={() => setMobileMenuOpen(false)}
         >
-          <button
-            className={`nav-item dropdown-btn ${location.pathname.startsWith("/sports") ? "nav-item-active" : ""}`}
-            onClick={() => setShowSportsDropdown(!showSportsDropdown)}
-          >
-            Sports
-            <ChevronDown size={14} className={`dropdown-chevron ${showSportsDropdown ? "open" : ""}`} />
-          </button>
-          {showSportsDropdown && (
-            <div className="dropdown-menu">
-              <Link
-                to="/sports"
-                className="dropdown-item dropdown-item-header"
-                onClick={() => {
-                  setShowSportsDropdown(false);
-                  setMobileMenuOpen(false);
-                }}
-              >
-                All Grounds & Fields
-              </Link>
-              <div className="dropdown-divider" />
-              {sports.length > 0 ? (
-                sports.map((s) => (
-                  <Link
-                    key={s.id}
-                    to={`/tournaments?sport=${s.id}`}
-                    className="dropdown-item"
-                    onClick={() => {
-                      setShowSportsDropdown(false);
-                      setMobileMenuOpen(false);
-                    }}
-                  >
-                    <span className="dropdown-item-name">{s.name}</span>
-                    <span className="dropdown-item-badge">Field</span>
-                  </Link>
-                ))
-              ) : (
-                <span className="dropdown-item-muted">Loading sports...</span>
-              )}
-            </div>
-          )}
-        </div>
+          Sports
+        </Link>
 
         {/* Tournaments with Live Count Pill */}
         <Link
